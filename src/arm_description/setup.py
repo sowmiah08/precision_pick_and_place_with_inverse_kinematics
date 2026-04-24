@@ -1,6 +1,8 @@
 from setuptools import find_packages, setup
+from glob import glob
+import os
 
-package_name = 'cube_detections'
+package_name = 'arm_description'
 
 setup(
     name=package_name,
@@ -10,12 +12,17 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        ('share/' + package_name +'/launch', ['launch/cube_system.launch.py']),
+        (os.path.join('share', package_name, 'urdf'),
+            glob('urdf/*')),
+        (os.path.join('share', package_name, 'assets'),
+            glob('assets/*')),
+        (os.path.join('share', package_name, 'launch'),
+            glob('launch/*')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='zozo',
-    maintainer_email='snknitheesh@gmail.com',
+    maintainer_email='sowmiah.jerom@gmail.com',
     description='TODO: Package description',
     license='Apache-2.0',
     extras_require={
@@ -24,13 +31,7 @@ setup(
         ],
     },
     entry_points={
-        'console_scripts': [ 
-            'cube_detector = cube_detections.cube_detector:main',
-            'pointcloud_view = cube_detections.pointcloud_view:main',
-            'detector02 = cube_detections.detector02:main',
-            'tag_to_tf = cube_detections.tag_to_tf:main',
-            'target_tranform = cube_detections.target_transform:main',
-            'add_table = cube_detections.add_table:main',
+        'console_scripts': [
         ],
     },
 )
