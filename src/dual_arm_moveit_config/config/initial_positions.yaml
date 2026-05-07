@@ -1,0 +1,9 @@
+# Default initial positions for so101_dual_arm's ros2_control fake system
+
+initial_positions:
+  right_elbow_flex: 0
+  right_gripper: 0
+  right_shoulder_lift: 0
+  right_shoulder_pan: 0
+  right_wrist_flex: 0
+  right_wrist_roll: 0

@@ -4,7 +4,7 @@ from ament_index_python.packages import get_package_share_directory
 import os 
 
 def generate_launch_description():
-    pkg_path = get_package_share_directory('arm_description')
+    pkg_path = get_package_share_directory('so101_description')
     urdf_path = os.path.join(pkg_path, 'urdf', 'so101_new_calib.urdf') 
     
     return LaunchDescription([ 

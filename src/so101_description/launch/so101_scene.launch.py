@@ -7,7 +7,7 @@ import os
 
 
 def generate_launch_description():
-    pkg_path = get_package_share_directory('arm_description')
+    pkg_path = get_package_share_directory('so101_description')
     xacro_path = os.path.join(pkg_path, 'urdf', 'so101_scene.urdf.xacro')
 
     robot_description = ParameterValue(

@@ -11,6 +11,8 @@ import open3d as o3d
 
 
 MIN_CLUSTER_POINTS = 50
+DBSCAN_EPS = 0.02      # 2 cm (tune if needed)
+DBSCAN_MIN_POINTS = 30
 
 
 class CubeTracker(Node):
@@ -25,9 +27,10 @@ class CubeTracker(Node):
             10,
         )
 
-        # Single publisher
-        self.pub_cube = self.create_publisher(PointStamped, '/cube_3d', 10)
+        self.pub_red = self.create_publisher(PointStamped, '/cube_red_3d', 10)
+        self.pub_blue = self.create_publisher(PointStamped, '/cube_blue_3d', 10)
 
+        # Open3D visualizer
         self.vis = o3d.visualization.Visualizer()
         self.vis.create_window(window_name='Red + Blue Cube Tracker')
 
@@ -51,17 +54,18 @@ class CubeTracker(Node):
             return
 
         rgb = self._unpack_rgb(rgb_float)
-        hsv = cv2.cvtColor(rgb[np.newaxis, :, :], cv2.COLOR_RGB2HSV)[0]
 
+        hsv = cv2.cvtColor(rgb[np.newaxis, :, :], cv2.COLOR_RGB2HSV)[0]
         h, s, v = hsv[:, 0], hsv[:, 1], hsv[:, 2]
 
         red_mask = ((h < 10) | (h > 170)) & (s > 120) & (v > 70)
         blue_mask = (h > 100) & (h < 140) & (s > 150) & (v > 50)
 
-        # Publish whichever cube is detected
-        self._publish_centroid(xyz, red_mask, msg.header, 'red')
-        self._publish_centroid(xyz, blue_mask, msg.header, 'blue')
+        # Publish cubes with clustering + filtering
+        self._publish_clusters(xyz, red_mask, msg.header, self.pub_red, 'red')
+        self._publish_clusters(xyz, blue_mask, msg.header, self.pub_blue, 'blue')
 
+        # Visualization
         colors = rgb.astype(np.float32) / 255.0
         if red_mask.any():
             colors[red_mask] = (1.0, 0.0, 0.0)
@@ -79,6 +83,90 @@ class CubeTracker(Node):
         self.vis.poll_events()
         self.vis.update_renderer()
 
+    # -----------------------------
+    # CLUSTERING + FILTERING
+    # -----------------------------
+    def _publish_clusters(self, xyz, mask, header, publisher, label):
+
+        points = xyz[mask]
+        if len(points) < MIN_CLUSTER_POINTS:
+            return
+
+        clusters = self._get_clusters(points)
+
+        for cluster in clusters:
+
+            if len(cluster) < MIN_CLUSTER_POINTS:
+                continue
+
+            if not self._is_cube_like(cluster):
+                continue
+
+            centroid = cluster.mean(axis=0)
+
+            pt = PointStamped()
+            pt.header = header
+            pt.point.x = float(centroid[0])
+            pt.point.y = float(centroid[1])
+            pt.point.z = float(centroid[2])
+
+            publisher.publish(pt)
+
+            self.get_logger().info(
+                f"{label} cube -> ({centroid[0]:+.3f}, {centroid[1]:+.3f}, {centroid[2]:+.3f})"
+            )
+
+    def _get_clusters(self, xyz):
+
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(xyz)
+
+        labels = np.array(
+            pcd.cluster_dbscan(
+                eps=DBSCAN_EPS,
+                min_points=DBSCAN_MIN_POINTS,
+                print_progress=False
+            )
+        )
+
+        clusters = []
+        for i in range(labels.max() + 1):
+            clusters.append(xyz[labels == i])
+
+        return clusters
+
+    def _is_cube_like(self, cluster):
+
+        min_pt = cluster.min(axis=0)
+        max_pt = cluster.max(axis=0)
+        size = max_pt - min_pt
+
+        x, y, z = size
+
+        # Reject long objects (wires)
+        if max(x, y, z) > 0.06:
+            return False
+
+        # Reject flat/thin
+        if min(x, y, z) < 0.015:
+            return False
+
+        # Cube size constraint (3 cm cube)
+        expected = 0.03
+        tol = 0.015
+
+        if not (expected - tol < x < expected + tol):
+            return False
+        if not (expected - tol < y < expected + tol):
+            return False
+        if not (expected - tol < z < expected + tol):  
+            return False
+
+        return True
+
+    # -----------------------------
+    # UTILITIES
+    # -----------------------------
     @staticmethod
     def _extract_xyz_rgb(pc):
         if isinstance(pc, np.ndarray) and pc.dtype.names:
@@ -109,26 +197,6 @@ class CubeTracker(Node):
 
         return np.stack([r, g, b], axis=-1)
 
-    def _publish_centroid(self, xyz, mask, header, label):
-        n = int(mask.sum())
-
-        if n < MIN_CLUSTER_POINTS:
-            return
-
-        centroid = xyz[mask].mean(axis=0)
-
-        pt = PointStamped()
-        pt.header = header
-        pt.point.x = float(centroid[0])
-        pt.point.y = float(centroid[1])
-        pt.point.z = float(centroid[2])
-
-        self.pub_cube.publish(pt)
-
-        self.get_logger().info(
-            f"{label} cube -> /cube_3d @ "
-            f"({centroid[0]:+.3f}, {centroid[1]:+.3f}, {centroid[2]:+.3f})"
-        )
 
 def main():
     rclpy.init()

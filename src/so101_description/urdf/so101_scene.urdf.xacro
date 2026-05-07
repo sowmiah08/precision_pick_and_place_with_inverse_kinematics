@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <robot name="so101_scene" xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-  <xacro:include filename="$(find arm_description)/urdf/so101_new_calib.urdf"/>
+  <xacro:include filename="$(find so101_description)/urdf/so101_new_calib.urdf"/>
 
   <xacro:property name="table_x"     value="1.0"/>
   <xacro:property name="table_y"     value="0.6"/>
