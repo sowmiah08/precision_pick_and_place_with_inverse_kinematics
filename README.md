@@ -1,38 +1,43 @@
-# Pick & Place with Inverse Kinematics
+# Dual-Arm Autonomous Pick & Place with Perception
 
-An autonomous robotic pick-and-place system that combines computer vision, coordinate-frame calibration, and inverse kinematics so that a robot arm can see a cube on the workspace, move to it, grasp it, and drop it into a fixed box — all on its own.
+An autonomous pick-and-place system for a **dual-arm SO-101** workcell driven by **MoveIt** motion planning and **RealSense** point-cloud perception.
 
-A RealSense camera observes the scene, locates the cube in 3D, and the system transforms that point from the camera frame into the robot's base frame using an AprilTag-based calibration. The resulting target is fed to a LeRobot controller which solves IK for the SO-101 arm and executes the full pick-and-place cycle.
+A top-mounted RGB-D camera observes the workspace, detects coloured cubes in 3D from the point cloud, transforms each detection from the camera frame into the robot base frame using TF2, and feeds the resulting target into a MoveIt-driven pick sequence. A hardware bridge then executes the planned trajectory on the real SO-101 servos.
 
-The **ROS 2** side handles perception and spatial reasoning. **LeRobot** handles motion and manipulation.
+> The robot is built as a dual-arm cell, but for now only the **right arm** is wired into the pick pipeline. The left arm is described and modelled but inactive. Gazebo is **not** used in the current flow — perception runs on the real RealSense and motion runs on the real arm.
 
 ---
 
 ## System Overview
 
 ```
-  RealSense camera
-        │  /camera/.../depth/color/points
-        ▼
-  ┌──────────────┐       ┌──────────────┐
-  │ cube_detector│       │ apriltag_ros │
-  └──────┬───────┘       └──────┬───────┘
-         │ /cube_3d             │ /detections + tag TF
-         │                      ▼
-         │              ┌──────────────┐
-         │              │  tag_to_tf   │  (one-shot calibration)
-         │              └──────┬───────┘
-         │                     │ static TF:
-         │                     │  camera_color_optical_frame → base_link
-         ▼                     ▼
-     ┌────────────────────────────┐
-     │      target_transform      │   (cube_3d → base_link, EMA + deadband)
-     └──────────────┬─────────────┘
-                    │ /cube_target
-                    ▼
-              ┌───────────┐
-              │ pick_cube │   (LeRobot IK → SO-101)
-              └───────────┘
+        RealSense (RGB + depth)
+                 │  /camera/camera/depth/color/points
+                 ▼
+        ┌────────────────┐
+        │ cube_detector  │  HSV red/blue mask → DBSCAN → cube-shape filter
+        └───────┬────────┘
+                │ /cube_red_3d
+                │ /cube_blue_3d   (PointStamped, camera_color_optical_frame)
+                ▼
+        ┌────────────────┐
+        │    tf_node     │  TF2: camera_color_optical_frame → right_base_link
+        └───────┬────────┘
+                │ /cube_base   (PointStamped, right_base_link)
+                ▼
+        ┌────────────────┐         ┌──────────────────┐
+        │ move_to_cube / │ ──────▶ │ MoveIt MoveGroup │
+        │     grasp      │         │  group=right_arm │
+        └────────────────┘         └────────┬─────────┘
+                                            │ FollowJointTrajectory
+                                            ▼
+                                  ┌────────────────────┐
+                                  │  test_bridge       │  FTServo SDK
+                                  │ (right arm bridge) │  → /dev/ttyACM1
+                                  └────────────────────┘
+                                            │
+                                            ▼
+                                    SO-101 right arm (real)
 ```
 
 ---
@@ -41,80 +46,128 @@ The **ROS 2** side handles perception and spatial reasoning. **LeRobot** handles
 
 ```
 pick_place_IK/
-├── src/
-│   └── cube_detections/              # ROS 2 package (perception + TF)
-│       ├── cube_detections/
-│       │   ├── cube_detector.py      # Colour-based 3D cube detection
-│       │   ├── tag_to_tf.py          # AprilTag → camera-to-base calibration
-│       │   └── target_transform.py   # Transforms cube point into base_link
-│       ├── launch/
-│       │   └── cube_system.launch.py # Brings up camera, AprilTag, and nodes
-│       ├── package.xml
-│       └── setup.py
-└── README.md
-```
-
-External to this repo, on the same machine:
-
-```
-lerobot/
-└── pick_cube.py                      # IK + motion execution on SO-101
+└── src/
+    ├── cube_detections/             # Perception + TF + MoveIt client + HW bridge
+    │   ├── cube_detections/
+    │   │   ├── cube_detector.py     # Point-cloud cube detection (red + blue)
+    │   │   ├── tf_node.py           # camera frame → right_base_link
+    │   │   ├── move_to_cube.py      # Single-shot MoveIt goal to the cube
+    │   │   ├── grasp.py             # Pre-grasp / grasp / lift state machine
+    │   │   ├── test_bridge.py       # FollowJointTrajectory → SO-101 servos
+    │   │   ├── right_arm_bridge.py  # Simpler trajectory→servo bridge
+    │   │   ├── cam_view.py          # RGB image viewer
+    │   │   └── pointcloud_view.py   # Open3D point-cloud viewer
+    │   └── launch/
+    │       ├── pick_place.launch.py     # Camera + detector + tf + move_to_cube
+    │       ├── right_bridge.launch.py   # MoveIt + RViz + hardware bridge
+    │       └── cube_system.launch.py    # AprilTag-based perception variant
+    │
+    ├── dual_arm_moveit_config/      # MoveIt 2 config for the dual-arm cell
+    │   ├── config/                  # SRDF, kinematics, controllers, joint limits
+    │   └── launch/                  # move_group, RViz, RSP, controllers
+    │
+    └── so101_description/           # URDFs / xacros for the dual-arm workcell
+        ├── urdf/
+        │   ├── dual_arm_final.urdf.xacro
+        │   ├── dual_arm_gazebo.urdf.xacro
+        │   ├── so101_left_arm.urdf.fragment
+        │   ├── so101_right_arm.urdf.fragment
+        │   └── so101_scene.urdf.xacro
+        └── launch/                  # RViz display, scene
 ```
 
 ---
 
-## ROS 2 Package: `cube_detections`
+## Packages
 
-### `cube_detector.py`
-Subscribes to the RealSense organised point cloud and segments the cube by colour in HSV (red and blue masks). The centroid of the coloured cluster is published as a `PointStamped` on `/cube_3d` in the camera's optical frame. Open3D is used for a live visualisation of the tagged point cloud.
+### `cube_detections` — perception, TF, planning client, and hardware bridge
+
+#### `cube_detector.py`
+Subscribes to the RealSense organised point cloud, segments red and blue cubes by HSV colour, then DBSCAN-clusters each colour and keeps clusters that match a 3 cm cube footprint.
 
 - **Subscribes:** `/camera/camera/depth/color/points` (`sensor_msgs/PointCloud2`)
-- **Publishes:** `/cube_3d` (`geometry_msgs/PointStamped`)
-- Clusters smaller than `MIN_CLUSTER_POINTS` (50) are ignored.
+- **Publishes:** `/cube_red_3d`, `/cube_blue_3d` (`geometry_msgs/PointStamped`, frame `camera_color_optical_frame`)
+- **Filters:** DBSCAN (`eps=0.02`, `min_points=30`), per-cluster bounding-box check (~3 cm cube ±1.5 cm), `MIN_CLUSTER_POINTS=50`
+- **Visualisation:** live Open3D window of the coloured point cloud
 
-### `tag_to_tf.py`
-One-shot camera-to-robot calibration. It subscribes to AprilTag detections, reads the tag-in-camera TF published by `apriltag_ros`, composes it with a known tag-to-base offset, and publishes the result as a **static** transform `camera_color_optical_frame → base_link`. The transform is averaged over `calibration_samples` detections (default 30) so the result is stable, and because it is static the calibration survives the arm later occluding the tag.
+#### `tf_node.py`
+TF2 listener that transforms each detected cube point from the camera optical frame into `right_base_link` and republishes a single merged target.
 
-- **Subscribes:** `/detections` (`apriltag_msgs/AprilTagDetectionArray`)
-- **Publishes (static TF):** `camera_color_optical_frame → base_link`
-- **Parameters:**
-  - `tag_to_base_xyz` — pose of `base_link` expressed in the tag frame (default `[0.0, -0.08, 0.0]`)
-  - `tag_to_base_rpy` — same, rotational part
-  - `calibration_samples` — number of detections to average (default `30`)
+- **Subscribes:** `/cube_red_3d`, `/cube_blue_3d`
+- **Publishes:** `/cube_base` (`PointStamped`, frame `right_base_link`)
 
-### `target_transform.py`
-Converts the cube point from the camera frame into `base_link` and smooths it so the arm gets clean set-points.
+#### `move_to_cube.py`
+Lightweight MoveIt client. Buffers the last 10 detections, requires a stable mean before acting, then sends a single position+orientation constrained `MoveGroup` goal at +4 cm above the cube with a top-down end-effector orientation.
 
-- **Subscribes:** `/cube_3d`
-- **Publishes:** `/cube_target` (`PointStamped`, in `base_link`)
-- **Filtering:**
-  - EMA low-pass (`ema_alpha`, default `0.25`)
-  - Deadband to suppress sub-millimetre jitter (`deadband_m`, default `0.015`)
-  - Reset on large jumps so the filter re-locks instead of dragging (`reset_jump_m`, default `0.25`)
+- **Action client:** `/move_action` (`moveit_msgs/MoveGroup`)
+- **Planning group:** `right_arm`
+- **End-effector link:** `right_moving_jaw_so101_v1_link`
+- **Tolerances:** 1 cm position box, 0.1 rad orientation
+- **Scaling:** 30 % velocity / 30 % acceleration
 
-### Launch
-`launch/cube_system.launch.py` brings up the whole perception stack:
-- RealSense (`realsense2_camera`, with point cloud enabled)
-- `apriltag_ros` configured for family `16h5`, tag size `0.03 m`
-- `cube_detector`, `tag_to_tf`, `target_transform`
+#### `grasp.py`
+Full pick state machine over the same MoveIt action:
+
+1. `PRE_GRASP` — move to +3.5 cm above the stable cube target
+2. `GRASP` — descend to +0.8 cm
+3. `CLOSE_GRIPPER` — placeholder hook (no real gripper command yet)
+4. `LIFT` — raise the end effector by 10 cm
+
+Each step uses the same constrained `MoveGroup` goal builder as `move_to_cube`, so motion stays smooth and within configured tolerances.
+
+#### `test_bridge.py` — real-arm trajectory executor
+ROS 2 action server that exposes `/right_arm_controller/follow_joint_trajectory` (`control_msgs/FollowJointTrajectory`) and drives the SO-101 right-arm servos directly over the **FTServo Python SDK**. It also publishes `/joint_states` at 20 Hz from servo telemetry so MoveIt and RViz see the real robot.
+
+- **Servos:** IDs 1–6 on `/dev/ttyACM1` @ 1 Mbps
+- **Joints:** `right_shoulder_pan`, `right_shoulder_lift`, `right_elbow_flex`, `right_wrist_flex`, `right_wrist_roll`, `right_gripper`
+- **Conversion:** servo ticks `[0..4095]` ↔ radians `[-π..+π]`
+- **Default speed/accel:** `300` / `100`
+
+`right_arm_bridge.py` is a simpler variant that consumes `/right_arm_controller/joint_trajectory` directly without the action interface.
+
+#### `tag_to_tf.py` (optional)
+AprilTag-based one-shot calibration that publishes a static `camera_color_optical_frame → base_link` TF. Used by the alternate `cube_system.launch.py` flow when the camera is not already calibrated against the URDF.
 
 ---
 
-## LeRobot Controller: `pick_cube.py`
+### `dual_arm_moveit_config` — MoveIt 2 configuration
 
-Lives in `lerobot/pick_cube.py`. It is a ROS 2 node that drives the SO-101 follower arm.
+Generated for the dual-arm SO-101 cell (`so101_dual_arm`). Defines:
 
-- **Subscribes:** `/cube_target` (`PointStamped` in `base_link`)
-- **Hardware:** `SO101Follower` on `/dev/ttyACM1`
-- **Kinematics:** `lerobot.model.kinematics.RobotKinematics` using `SO101/so101_new_calib.urdf`, end-effector frame `gripper_frame_link`
-- **Flow per target:**
-  1. Read current joint angles from the robot (IK seed).
-  2. Clamp the target into the workspace (`±0.25 m` in x/y, `0.03–0.35 m` in z).
-  3. Add a `+0.05 m` vertical offset to approach from above.
-  4. Solve position-only IK.
-  5. Step-limit joint deltas so the arm moves smoothly.
-  6. Send joint targets to the SO-101 bus.
-- **Idle behaviour:** if no `/cube_target` arrives for 3 s, the arm returns to `HOME_Q`. It also homes cleanly on shutdown.
+- **Planning group:** `right_arm`, base `right_base_link` → tip `right_moving_jaw_so101_v1_link`
+- **End effector:** `right_gripper`
+- **Configs:** `kinematics.yaml`, `joint_limits.yaml`, `moveit_controllers.yaml`, `ros2_controllers.yaml`, `pilz_cartesian_limits.yaml`, `initial_positions.yaml`
+- **SRDF:** `so101_dual_arm.srdf` with full disable-collisions matrix for the dual-arm cell
+
+Standard MoveIt launch files are included (`move_group`, `moveit_rviz`, `rsp`, `static_virtual_joint_tfs`, `spawn_controllers`, `demo`).
+
+---
+
+### `so101_description` — URDFs and scene
+
+Holds the geometry and kinematics of the dual-arm workcell:
+
+- `dual_arm_final.urdf.xacro` — the production dual-arm cell (right + left + table + camera mount)
+- `dual_arm_gazebo.urdf.xacro` — Gazebo-instrumented variant (not used in the current flow)
+- `so101_right_arm.urdf.fragment`, `so101_left_arm.urdf.fragment` — per-arm fragments composed into the cell
+- `so101_scene.urdf.xacro` — table, legs, pipe, upper shelf, camera mount
+
+Launch files include `dual_setup.launch.py` (RSP + JSP-GUI + RViz) and `so101_display.launch.py` for inspection.
+
+---
+
+## Topics & Frames Summary
+
+| Topic                                                | Type                                | Frame                          | Produced by      |
+|------------------------------------------------------|-------------------------------------|--------------------------------|------------------|
+| `/camera/camera/depth/color/points`                  | `sensor_msgs/PointCloud2`           | `camera_color_optical_frame`   | `realsense2_camera` |
+| `/cube_red_3d`, `/cube_blue_3d`                      | `geometry_msgs/PointStamped`        | `camera_color_optical_frame`   | `cube_detector`  |
+| `/cube_base`                                         | `geometry_msgs/PointStamped`        | `right_base_link`              | `tf_node`        |
+| `/move_action`                                       | `moveit_msgs/MoveGroup` (action)    | —                              | `move_group`     |
+| `/right_arm_controller/follow_joint_trajectory`      | `control_msgs/FollowJointTrajectory` (action) | —                    | `test_bridge`    |
+| `/joint_states`                                      | `sensor_msgs/JointState`            | —                              | `test_bridge`    |
+
+Active planning group: **`right_arm`** (`right_base_link` → `right_moving_jaw_so101_v1_link`).
 
 ---
 
@@ -122,11 +175,13 @@ Lives in `lerobot/pick_cube.py`. It is a ROS 2 node that drives the SO-101 follo
 
 ### Prerequisites
 - ROS 2 (Humble or newer)
-- `realsense2_camera`, `apriltag_ros`, `tf2_ros`, `sensor_msgs_py`
-- `open3d`, `numpy`, `opencv-python`
-- LeRobot installed in the companion `lerobot/` workspace with the SO-101 URDF at `SO101/so101_new_calib.urdf`
-- An Intel RealSense camera
-- An AprilTag (`tag16h5`, 30 mm) fixed to a known offset from the robot base
+- MoveIt 2
+- `realsense2_camera`
+- `tf2_ros`, `tf2_geometry_msgs`, `sensor_msgs_py`
+- `numpy`, `opencv-python`, `open3d`
+- Intel RealSense camera mounted above the workcell
+- SO-101 right arm wired to the host on `/dev/ttyACM1`
+- Feetech FTServo Python SDK at `/home/Downloads/FTServo_Python` (path is hard-coded in `test_bridge.py` / `right_arm_bridge.py`)
 
 ### Build
 ```bash
@@ -135,29 +190,28 @@ colcon build --symlink-install
 source install/setup.bash
 ```
 
-### Run the perception stack
-```bash
-ros2 launch cube_detections cube_system.launch.py
-```
-Keep the AprilTag visible until you see `Calibration locked.` in the log — after that the tag can be occluded.
+### Run
 
-### Run the arm controller (separate terminal)
+Three terminals — all sourced with `install/setup.bash`.
+
+**Terminal 1 — MoveIt + RViz + real-arm bridge**
 ```bash
-cd /lake/workspaces/sowmi_ws/lerobot
-python3 pick_cube.py
+ros2 launch cube_detections right_bridge.launch.py
 ```
+Brings up `robot_state_publisher`, MoveIt's `move_group`, RViz with the MoveIt panel, and `test_bridge` (the FollowJointTrajectory server that talks to the SO-101 servos).
+
+**Terminal 2 — Perception + planner client**
+```bash
+ros2 launch cube_detections pick_place.launch.py
+```
+Starts the RealSense camera, `cube_detector`, `tf_node`, and `move_to_cube`. Place a red or blue 3 cm cube on the table within camera view; once 10 stable detections are buffered, the right arm plans and moves to the cube.
+
+To run the full pick state machine instead of a single move, replace `move_to_cube` with `grasp` in the launch file (or `ros2 run cube_detections grasp` in a third terminal).
 
 ---
 
-## Topics & Frames Summary
+## Roadmap
 
-| Topic           | Type                              | Frame                           | Produced by        |
-|-----------------|-----------------------------------|---------------------------------|--------------------|
-| `/cube_3d`      | `geometry_msgs/PointStamped`      | `camera_color_optical_frame`    | `cube_detector`    |
-| `/cube_target`  | `geometry_msgs/PointStamped`      | `base_link`                     | `target_transform` |
-| `/detections`   | `apriltag_msgs/AprilTagDetectionArray` | —                          | `apriltag_node`    |
-
-Static TF published by `tag_to_tf`: `camera_color_optical_frame → base_link`.
-
----
-
+- Bring the **left arm** into the pipeline as a second MoveIt planning group and add a hand-off / place behaviour between the two arms.
+- Wire a real gripper command into the `CLOSE_GRIPPER` step of `grasp.py`.
+- Optional Gazebo flow via `dual_arm_gazebo.urdf.xacro` and `dual_setup_gazebo.launch.py` for sim-in-the-loop testing.
