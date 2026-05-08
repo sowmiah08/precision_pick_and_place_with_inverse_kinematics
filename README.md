@@ -4,7 +4,7 @@ An autonomous pick-and-place system for a **dual-arm SO-101** workcell driven by
 
 A top-mounted RGB-D camera observes the workspace, detects coloured cubes in 3D from the point cloud, transforms each detection from the camera frame into the robot base frame using TF2, and feeds the resulting target into a MoveIt-driven pick sequence. A hardware bridge then executes the planned trajectory on the real SO-101 servos.
 
-> The robot is built as a dual-arm cell, but for now only the **right arm** is wired into the pick pipeline. The left arm is described and modelled but inactive. Gazebo is **not** used in the current flow — perception runs on the real RealSense and motion runs on the real arm.
+> The robot is built as a dual-arm cell, but for now only the **right arm** is wired into the pick pipeline. The left arm is described and modelled but inactive.
 
 ---
 
@@ -214,4 +214,4 @@ To run the full pick state machine instead of a single move, replace `move_to_cu
 
 - Bring the **left arm** into the pipeline as a second MoveIt planning group and add a hand-off / place behaviour between the two arms.
 - Wire a real gripper command into the `CLOSE_GRIPPER` step of `grasp.py`.
-- Optional Gazebo flow via `dual_arm_gazebo.urdf.xacro` and `dual_setup_gazebo.launch.py` for sim-in-the-loop testing.
+
