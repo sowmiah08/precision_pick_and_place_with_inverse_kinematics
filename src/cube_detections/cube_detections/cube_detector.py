@@ -11,7 +11,7 @@ import open3d as o3d
 
 
 MIN_CLUSTER_POINTS = 50
-DBSCAN_EPS = 0.02      # 2 cm (tune if needed)
+DBSCAN_EPS = 0.02      
 DBSCAN_MIN_POINTS = 30
 
 

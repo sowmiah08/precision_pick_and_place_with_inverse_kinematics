@@ -1,12 +1,7 @@
-# pointcloud_view.py
-# ROS2 node to visualize RealSense point cloud in Open3D
-
 import rclpy
 from rclpy.node import Node
-
 from sensor_msgs.msg import PointCloud2
 from sensor_msgs_py import point_cloud2
-
 import numpy as np
 import open3d as o3d
 

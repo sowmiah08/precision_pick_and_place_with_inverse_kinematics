@@ -66,6 +66,5 @@ def generate_launch_description():
         realsense_launch,
         cube_detector,
         tf_node,
-        move_to_cube,
-        grasp
+        move_to_cube
     ])

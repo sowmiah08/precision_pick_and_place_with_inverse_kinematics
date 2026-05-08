@@ -34,7 +34,9 @@ setup(
             'tf_node = cube_detections.tf_node:main',
             'cam_view = cube_detections.cam_view:main',
             'move_to_cube = cube_detections.move_to_cube:main',
-            'grasp = cube_detections.grasp:main'
+            'grasp = cube_detections.grasp:main',
+            'right_arm_bridge = cube_detections.right_arm_bridge:main',
+            'test_bridge = cube_detections.test_bridge:main',
         ],
     },
 )
