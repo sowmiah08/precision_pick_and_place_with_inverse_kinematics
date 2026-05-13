@@ -18,16 +18,16 @@
   <xacro:property name="leg_length"  value="${table_top_z - table_thick}"/>
 
   <!-- ================= ROBOTS =================== -->
-  <xacro:property name="robot_y"       value="${table_y/2}"/>
+  <xacro:property name="robot_y"       value="${(table_y/2)-0.015}"/>
   <xacro:property name="robot_left_x"  value="-0.25"/>
   <xacro:property name="robot_right_x" value="0.25"/>
   <xacro:property name="robot_yaw"     value="${-pi/2}"/>
 
   <!-- ================= CAMERA ================= -->
-  <xacro:property name="pipe_radius" value="0.02"/>
-  <xacro:property name="pipe_length" value="0.65"/>
+  <xacro:property name="pipe_radius" value="0.04"/>
+  <xacro:property name="pipe_length" value="0.58"/>
 
-  <xacro:property name="pipe_x" value="0.0"/>
+  <xacro:property name="pipe_x" value="0.025"/>
   <xacro:property name="pipe_y" value="${robot_y}"/>
 
   <xacro:property name="cam_pitch" value="${pi/3}"/>

@@ -5,21 +5,6 @@ moveit_setup_assistant_config:
   srdf:
     relative_path: config/so101_dual_arm.srdf
   package_settings:
-    author_name: Sowmiya
-    author_email: sowmiah.jerom@gmail.com
-    generated_timestamp: 1778156924
-  control_xacro:
-    command:
-      - position
-    state:
-      - position
-      - velocity
-  modified_urdf:
-    xacros:
-      - control_xacro
-  control_xacro:
-    command:
-      - position
-    state:
-      - position
-      - velocity
+    author_name: sowmiya
+    author_email: sowmiah.jerom@gmai.com
+    generated_timestamp: 1778693970

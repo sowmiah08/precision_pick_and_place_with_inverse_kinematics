@@ -3,14 +3,14 @@ controller_manager:
   ros__parameters:
     update_rate: 100  # Hz
 
-    right_arm_controller:
+    so101_right_arm_controller:
       type: joint_trajectory_controller/JointTrajectoryController
 
 
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
 
-right_arm_controller:
+so101_right_arm_controller:
   ros__parameters:
     joints:
       - right_shoulder_pan
@@ -20,8 +20,7 @@ right_arm_controller:
       - right_wrist_roll
       - right_gripper
     command_interfaces:
-      - position
+      []
     state_interfaces:
-      - position
-      - velocity
+      []
     allow_nonzero_velocity_at_trajectory_end: true

@@ -23,7 +23,7 @@ DEVICENAME = '/dev/ttyACM1'
 BAUDRATE = 1000000
 MOTOR_IDS = [1, 2, 3, 4, 5, 6]
 
-ACTION_NAME = '/right_arm_controller/follow_joint_trajectory'
+ACTION_NAME = '/so101_right_arm_controller/follow_joint_trajectory'
 
 
 class RightArmHardware(Node):

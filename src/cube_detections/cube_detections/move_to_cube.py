@@ -68,7 +68,7 @@ class MoveToCube(Node):
         pose.header.stamp = self.get_clock().now().to_msg()
 
         pose.pose.position = msg.point
-        pose.pose.position.z += 0.04
+        pose.pose.position.z += 0.06
 
         pose.pose.orientation.x = 0.0
         pose.pose.orientation.y = 1.0
@@ -106,7 +106,7 @@ class MoveToCube(Node):
         constraints.orientation_constraints.append(ori_constraint)
 
         goal = MoveGroup.Goal()
-        goal.request.group_name = "right_arm"
+        goal.request.group_name = "so101_right_arm"
         goal.request.goal_constraints.append(constraints)
         goal.request.num_planning_attempts = 5
         goal.request.allowed_planning_time = 5.0
