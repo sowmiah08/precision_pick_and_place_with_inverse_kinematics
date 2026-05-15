@@ -19,7 +19,7 @@ from sensor_msgs.msg import JointState
 from control_msgs.action import FollowJointTrajectory
 
 
-DEVICENAME = '/dev/ttyACM1'
+DEVICENAME = '/dev/ttyACM2'
 BAUDRATE = 1000000
 MOTOR_IDS = [1, 2, 3, 4, 5, 6]
 

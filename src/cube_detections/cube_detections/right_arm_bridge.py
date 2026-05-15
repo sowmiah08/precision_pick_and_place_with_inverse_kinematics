@@ -8,7 +8,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectory
 
-DEVICENAME = '/dev/ttyACM1'
+DEVICENAME = '/dev/ttyACM2'
 BAUDRATE = 1000000
 MOTOR_IDS = [1, 2, 3, 4, 5, 6]  # Right arm
 STS_PRESENT_POSITION_L = 56
