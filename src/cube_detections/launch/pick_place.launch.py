@@ -63,7 +63,6 @@ def generate_launch_description():
 
 
     return LaunchDescription([
-        realsense_launch,
         cube_detector,
         tf_node,
         move_to_cube

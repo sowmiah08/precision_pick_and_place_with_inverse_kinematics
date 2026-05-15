@@ -2,6 +2,7 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PointStamped, PoseStamped
 from rclpy.action import ActionClient
+
 from moveit_msgs.action import MoveGroup
 from moveit_msgs.msg import (
     Constraints,
@@ -11,12 +12,14 @@ from moveit_msgs.msg import (
 )
 
 from shape_msgs.msg import SolidPrimitive
+
 from collections import deque
 import numpy as np
 
 class MoveToCube(Node):
 
     def __init__(self):
+
         super().__init__('move_to_cube')
 
         self.action_client = ActionClient(
@@ -24,6 +27,7 @@ class MoveToCube(Node):
             MoveGroup,
             '/move_action'
         )
+
         self.busy = False
 
         self.pose_buffer = deque(maxlen=10)
@@ -37,9 +41,9 @@ class MoveToCube(Node):
 
         self.get_logger().info("Waiting for MoveGroup action server...")
         self.action_client.wait_for_server()
-        self.get_logger().info("Moveit connected.")
+        self.get_logger().info("MoveIt connected.")
 
-
+    # STABLE POSE
     def get_stable_pose(self):
 
         if len(self.pose_buffer) < 10:
@@ -58,73 +62,86 @@ class MoveToCube(Node):
         stable_msg.point.z = float(z)
 
         return stable_msg
-
-    def create_goal(self, msg):
+    
+    # PRE-GRASP GOAL
+    def create_pregrasp_goal(self, msg):
 
         pose = PoseStamped()
 
         pose.header.frame_id = msg.header.frame_id
         pose.header.stamp = self.get_clock().now().to_msg()
 
-        pose.pose.position.x = msg.point.x 
-        pose.pose.position.y = msg.point.y 
-        pose.pose.position.z += 0.1
+        pose.pose.position.x = msg.point.x
+        pose.pose.position.y = msg.point.y
+        pose.pose.position.z = msg.point.z + 0.15
 
         pose.pose.orientation.x = 0.0
-        pose.pose.orientation.y = 0.0
+        pose.pose.orientation.y = 1.0
         pose.pose.orientation.z = 0.0
-        pose.pose.orientation.w = 1.0
+        pose.pose.orientation.w = 0.0
 
         pos_constraint = PositionConstraint()
         pos_constraint.header.frame_id = pose.header.frame_id
-        pos_constraint.link_name = "right_moving_jaw_so101_v1_link"
+        pos_constraint.link_name = ("right_moving_jaw_so101_v1_link")
 
         box = SolidPrimitive()
         box.type = SolidPrimitive.BOX
-        box.dimensions = [0.01, 0.01, 0.01]
+        box.dimensions = [
+            0.01,
+            0.01,
+            0.01
+        ]
 
         bv = BoundingVolume()
         bv.primitives.append(box)
-        bv.primitive_poses.append(pose.pose)
+        bv.primitive_poses.append(
+            pose.pose
+        )
 
         pos_constraint.constraint_region = bv
         pos_constraint.weight = 1.0
 
         ori_constraint = OrientationConstraint()
-        ori_constraint.header.frame_id = pose.header.frame_id
-        ori_constraint.link_name = "right_moving_jaw_so101_v1_link"
-        ori_constraint.orientation = pose.pose.orientation
+        ori_constraint.header.frame_id = (pose.header.frame_id)
+        ori_constraint.link_name = ("right_moving_jaw_so101_v1_link")
+        ori_constraint.orientation = (pose.pose.orientation)
 
-        ori_constraint.absolute_x_axis_tolerance = 0.5
-        ori_constraint.absolute_y_axis_tolerance = 0.5
-        ori_constraint.absolute_z_axis_tolerance = 3.14
+        ori_constraint.absolute_x_axis_tolerance = 3.14
+        ori_constraint.absolute_y_axis_tolerance = 0.1
+        ori_constraint.absolute_z_axis_tolerance = 0.1
 
         ori_constraint.weight = 1.0
+
+      
 
         constraints = Constraints()
         constraints.position_constraints.append(pos_constraint)
         constraints.orientation_constraints.append(ori_constraint)
 
         goal = MoveGroup.Goal()
-        goal.request.group_name = "so101_right_arm"
+        goal.request.group_name = ("so101_right_arm")
         goal.request.goal_constraints.append(constraints)
-        goal.request.num_planning_attempts = 5
+
+        goal.request.num_planning_attempts = 10
         goal.request.allowed_planning_time = 5.0
         goal.request.max_velocity_scaling_factor = 0.3
         goal.request.max_acceleration_scaling_factor = 0.3
 
         return goal
 
+
     def send_goal(self, msg):
-        goal = self.create_goal(msg)
-        self.get_logger().info("Sending stable goal to MoveIt...")
+
+        goal = self.create_pregrasp_goal(msg)
+        self.get_logger().info("Sending PRE-GRASP goal to MoveIt...")
         self.busy = True
         future = self.action_client.send_goal_async(goal)
         future.add_done_callback(self.goal_response_callback)
-
-  
+    
     def goal_response_callback(self, future):
+
         goal_handle = future.result()
+
         if not goal_handle.accepted:
             self.get_logger().warn("Goal rejected")
             self.busy = False
@@ -132,16 +149,18 @@ class MoveToCube(Node):
 
         self.get_logger().info("Goal accepted")
 
-        result_future = goal_handle.get_result_async()
+        result_future = (goal_handle.get_result_async())
+
         result_future.add_done_callback(self.result_callback)
 
+
     def result_callback(self, future):
-
         future.result()
-        self.get_logger().info("Motion complete")
-        self.busy = False
 
+        self.get_logger().info("Pre-grasp motion complete")
+        self.busy = False
         self.pose_buffer.clear()
+
 
     def cube_callback(self, msg):
 
@@ -149,17 +168,15 @@ class MoveToCube(Node):
             return
 
         self.pose_buffer.append(msg)
-
         stable_pose = self.get_stable_pose()
 
         if stable_pose is None:
-            self.get_logger().info("getting stable cube detections...")
+
+            self.get_logger().info("Getting stable cube detections...")
             return
 
         self.get_logger().info("Stable cube pose acquired")
-
         self.send_goal(stable_pose)
-
 
 def main():
 

@@ -67,10 +67,11 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        realsense_launch,
         rsp_launch,
         static_tfs_launch,
         move_group_launch,
         rviz_launch,
-        bridge_node,
-        #realsense_launch
+        bridge_node
+        
     ])

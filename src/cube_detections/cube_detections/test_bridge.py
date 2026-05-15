@@ -41,6 +41,15 @@ class RightArmHardware(Node):
             'right_gripper'
         ]
 
+        self.joint_offsets = {
+            1: 0.0514,   # right_shoulder_pan
+            2: 0.0437,   # right_shoulder_lift
+            3: 0.1931,   # right_elbow_flex
+            4: 0.0905,   # right_wrist_flex
+            5: -0.0054,   # right_wrist_roll
+            6: -0.2587,     # gripper
+            }
+
         self.portHandler = PortHandler(DEVICENAME)
         self.packetHandler = sms_sts(self.portHandler)
 
@@ -103,7 +112,8 @@ class RightArmHardware(Node):
         for motor_id in MOTOR_IDS:
             raw = self.read_servo_position(motor_id)
             rad = self.servo_to_radians(raw)
-            positions.append(rad)
+            corrected_rad = rad + self.joint_offsets[motor_id]
+            positions.append(corrected_rad)
 
         msg.position = positions
         self.joint_pub.publish(msg)
@@ -158,7 +168,8 @@ class RightArmHardware(Node):
 
             for arm_idx, motor_id in enumerate(MOTOR_IDS):
                 rad = point.positions[idx_map[arm_idx]]
-                servo_value = self.radians_to_servo(rad)
+                corrected_rad = rad - self.joint_offsets[motor_id]
+                servo_value = self.radians_to_servo(corrected_rad)
                 self.packetHandler.WritePosEx(
                     motor_id,
                     servo_value,
