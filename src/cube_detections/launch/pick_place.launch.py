@@ -65,5 +65,6 @@ def generate_launch_description():
     return LaunchDescription([
         cube_detector,
         tf_node,
-        move_to_cube
+        move_to_cube,
+        
     ])

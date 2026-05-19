@@ -66,14 +66,15 @@ class MoveToCube(Node):
         pose.header.frame_id = msg.header.frame_id
         pose.header.stamp = self.get_clock().now().to_msg()
 
+
         pose.pose.position.x = msg.point.x 
-        pose.pose.position.y = msg.point.y 
-        pose.pose.position.z += 0.1
+        pose.pose.position.y = msg.point.y + 0.025
+        pose.pose.position.z = msg.point.z + 0.05
 
         pose.pose.orientation.x = 0.0
-        pose.pose.orientation.y = 0.0
+        pose.pose.orientation.y = -0.707
         pose.pose.orientation.z = 0.0
-        pose.pose.orientation.w = 1.0
+        pose.pose.orientation.w = 0.707
 
         pos_constraint = PositionConstraint()
         pos_constraint.header.frame_id = pose.header.frame_id
@@ -81,7 +82,7 @@ class MoveToCube(Node):
 
         box = SolidPrimitive()
         box.type = SolidPrimitive.BOX
-        box.dimensions = [0.01, 0.01, 0.01]
+        box.dimensions = [0.05, 0.05, 0.05]
 
         bv = BoundingVolume()
         bv.primitives.append(box)
@@ -90,20 +91,8 @@ class MoveToCube(Node):
         pos_constraint.constraint_region = bv
         pos_constraint.weight = 1.0
 
-        ori_constraint = OrientationConstraint()
-        ori_constraint.header.frame_id = pose.header.frame_id
-        ori_constraint.link_name = "right_moving_jaw_so101_v1_link"
-        ori_constraint.orientation = pose.pose.orientation
-
-        ori_constraint.absolute_x_axis_tolerance = 0.5
-        ori_constraint.absolute_y_axis_tolerance = 0.5
-        ori_constraint.absolute_z_axis_tolerance = 3.14
-
-        ori_constraint.weight = 1.0
-
         constraints = Constraints()
         constraints.position_constraints.append(pos_constraint)
-        constraints.orientation_constraints.append(ori_constraint)
 
         goal = MoveGroup.Goal()
         goal.request.group_name = "so101_right_arm"
@@ -117,7 +106,21 @@ class MoveToCube(Node):
 
     def send_goal(self, msg):
         goal = self.create_goal(msg)
-        self.get_logger().info("Sending stable goal to MoveIt...")
+        cube_dist = float(np.sqrt(
+            msg.point.x ** 2 + msg.point.y ** 2 + msg.point.z ** 2
+        ))
+        self.get_logger().info(
+            f"Cube in {msg.header.frame_id}: "
+            f"({msg.point.x:.3f}, {msg.point.y:.3f}, {msg.point.z:.3f}) "
+            f"dist_from_base={cube_dist:.3f}m"
+        )
+        pc = goal.request.goal_constraints[0].position_constraints[0]
+        gp = pc.constraint_region.primitive_poses[0]
+        self.get_logger().info(
+            f"Goal pose (target jaw): "
+            f"x={gp.position.x:.3f}, y={gp.position.y:.3f}, "
+            f"z={gp.position.z:.3f}"
+        )
         self.busy = True
         future = self.action_client.send_goal_async(goal)
         future.add_done_callback(self.goal_response_callback)

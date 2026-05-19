@@ -1,61 +1,45 @@
 import rclpy
 from rclpy.node import Node
-
 from geometry_msgs.msg import PointStamped, PoseStamped
-
 from rclpy.action import ActionClient
-
 from moveit_msgs.action import MoveGroup
 from moveit_msgs.msg import (
     Constraints,
     PositionConstraint,
-    OrientationConstraint,
     BoundingVolume
 )
 
 from shape_msgs.msg import SolidPrimitive
-
 from collections import deque
+from std_msgs.msg import Float64
 import numpy as np
+import time
 
 
-class PickCube(Node):
+class GraspCube(Node):
 
     def __init__(self):
 
-        super().__init__('pick_cube')
+        super().__init__('grasp_cube')
 
-        # ==================================================
-        # MoveIt action client
-        # ==================================================
         self.action_client = ActionClient(
             self,
             MoveGroup,
             '/move_action'
         )
 
-        self.get_logger().info("Waiting for MoveGroup...")
+        self.busy = False
 
-        self.action_client.wait_for_server()
-
-        self.get_logger().info("MoveGroup connected ...")
-
-        # ==================================================
-        # Stable pose buffer
-        # ==================================================
         self.pose_buffer = deque(maxlen=10)
 
-        # ==================================================
-        # States
-        # ==================================================
-        self.busy = False
-        self.state = "IDLE"
+        # -------- GRIPPER PUB --------
+        # change topic if needed
+        self.gripper_pub = self.create_publisher(
+            Float64,
+            '/right_gripper_controller/command',
+            10
+        )
 
-        self.target_pose = None
-
-        # ==================================================
-        # Subscribe to merged cube topic
-        # ==================================================
         self.sub_cube = self.create_subscription(
             PointStamped,
             '/cube_base',
@@ -63,11 +47,14 @@ class PickCube(Node):
             10
         )
 
-        self.get_logger().info("Pick node started")
+        self.get_logger().info("Waiting for MoveGroup action server...")
+        self.action_client.wait_for_server()
+        self.get_logger().info("MoveIt connected.")
 
-    # ==================================================
-    # Stable pose estimation
-    # ==================================================
+    # =========================================================
+    # STABLE POSE
+    # =========================================================
+
     def get_stable_pose(self):
 
         if len(self.pose_buffer) < 10:
@@ -77,240 +64,198 @@ class PickCube(Node):
         y = np.mean([p.point.y for p in self.pose_buffer])
         z = np.mean([p.point.z for p in self.pose_buffer])
 
-        msg = PointStamped()
+        stable_msg = PointStamped()
 
-        msg.header.frame_id = 'right_base_link'
+        stable_msg.header.frame_id = 'right_base_link'
 
-        msg.point.x = float(x)
-        msg.point.y = float(y)
-        msg.point.z = float(z)
+        stable_msg.point.x = float(x)
+        stable_msg.point.y = float(y)
+        stable_msg.point.z = float(z)
 
-        return msg
+        return stable_msg
 
-    # ==================================================
-    # Create MoveIt Goal
-    # ==================================================
-    def create_goal(self, msg, z_offset):
+    # =========================================================
+    # MOVEIT GOAL
+    # =========================================================
+
+    def create_goal(self, x, y, z, frame_id):
 
         pose = PoseStamped()
 
-        pose.header.frame_id = msg.header.frame_id
+        pose.header.frame_id = frame_id
         pose.header.stamp = self.get_clock().now().to_msg()
 
-        # --------------------------------------------------
-        # Position
-        # --------------------------------------------------
-        pose.pose.position = msg.point
-        pose.pose.position.z += z_offset
+        pose.pose.position.x = x
+        pose.pose.position.y = y
+        pose.pose.position.z = z
 
-        # --------------------------------------------------
-        # Top-down orientation
-        # --------------------------------------------------
+        # gripper pointing down
         pose.pose.orientation.x = 0.0
-        pose.pose.orientation.y = 1.0
+        pose.pose.orientation.y = -0.707
         pose.pose.orientation.z = 0.0
-        pose.pose.orientation.w = 0.0
+        pose.pose.orientation.w = 0.707
 
-        # ==================================================
-        # Position Constraint
-        # ==================================================
         pos_constraint = PositionConstraint()
-
-        pos_constraint.header.frame_id = pose.header.frame_id
-
+        pos_constraint.header.frame_id = frame_id
         pos_constraint.link_name = "right_moving_jaw_so101_v1_link"
 
         box = SolidPrimitive()
-
         box.type = SolidPrimitive.BOX
-
-        box.dimensions = [0.01, 0.01, 0.01]
+        box.dimensions = [0.03, 0.03, 0.03]
 
         bv = BoundingVolume()
-
         bv.primitives.append(box)
         bv.primitive_poses.append(pose.pose)
 
         pos_constraint.constraint_region = bv
-
         pos_constraint.weight = 1.0
 
-        # ==================================================
-        # Orientation Constraint
-        # ==================================================
-        ori_constraint = OrientationConstraint()
-
-        ori_constraint.header.frame_id = pose.header.frame_id
-
-        ori_constraint.link_name = "right_moving_jaw_so101_v1_link"
-
-        ori_constraint.orientation = pose.pose.orientation
-
-        ori_constraint.absolute_x_axis_tolerance = 0.1
-        ori_constraint.absolute_y_axis_tolerance = 0.1
-        ori_constraint.absolute_z_axis_tolerance = 0.1
-
-        ori_constraint.weight = 1.0
-
-        # ==================================================
         constraints = Constraints()
-
         constraints.position_constraints.append(pos_constraint)
 
-        constraints.orientation_constraints.append(ori_constraint)
-
-        # ==================================================
         goal = MoveGroup.Goal()
 
-        goal.request.group_name = "right_arm"
-
+        goal.request.group_name = "so101_right_arm"
         goal.request.goal_constraints.append(constraints)
 
         goal.request.num_planning_attempts = 5
-
         goal.request.allowed_planning_time = 5.0
 
-        goal.request.max_velocity_scaling_factor = 0.3
-
-        goal.request.max_acceleration_scaling_factor = 0.3
+        goal.request.max_velocity_scaling_factor = 0.2
+        goal.request.max_acceleration_scaling_factor = 0.2
 
         return goal
 
-    # ==================================================
-    # Send Goal
-    # ==================================================
-    def send_goal(self, msg, z_offset):
+    # =========================================================
+    # SEND MOTION
+    # =========================================================
 
-        goal = self.create_goal(msg, z_offset)
+    def move_to(self, x, y, z, frame_id):
 
-        self.get_logger().info(f"Sending {self.state} goal")
+        goal = self.create_goal(x, y, z, frame_id)
+
+        self.get_logger().info(
+            f"Moving to: x={x:.3f}, y={y:.3f}, z={z:.3f}"
+        )
 
         future = self.action_client.send_goal_async(goal)
 
-        future.add_done_callback(self.goal_response_callback)
-
-    # ==================================================
-    def goal_response_callback(self, future):
+        rclpy.spin_until_future_complete(self, future)
 
         goal_handle = future.result()
 
         if not goal_handle.accepted:
-
-            self.get_logger().warn("Goal rejected")
-
-            self.busy = False
-
-            return
-
-        self.get_logger().info("Goal accepted")
+            self.get_logger().error("Goal rejected")
+            return False
 
         result_future = goal_handle.get_result_async()
 
-        result_future.add_done_callback(self.result_callback)
+        rclpy.spin_until_future_complete(self, result_future)
 
-    # ==================================================
-    # Motion Sequence
-    # ==================================================
-    def result_callback(self, future):
+        self.get_logger().info("Motion complete")
 
-        future.result()
+        return True
 
-        self.get_logger().info(f"{self.state} motion complete")
+    # =========================================================
+    # GRIPPER
+    # =========================================================
 
-        # --------------------------------------------------
-        # PRE-GRASP COMPLETE
-        # --------------------------------------------------
-        if self.state == "PRE_GRASP":
+    def open_gripper(self):
 
-            self.state = "GRASP"
+        msg = Float64()
+        msg.data = 0.04
+        self.gripper_pub.publish(msg)
+        self.get_logger().info("Opening gripper")
+        time.sleep(1.0)
 
-            self.get_logger().info("Moving down to grasp pose")
+    def close_gripper(self):
 
-            self.send_goal(self.target_pose, z_offset=0.008)
+        msg = Float64()
+        # adjust based on your gripper
+        msg.data = 0.0
+        self.gripper_pub.publish(msg)
+        self.get_logger().info("Closing gripper")
+        time.sleep(1.0)
 
-            return
+    def grasp_cube(self, msg):
 
-        # --------------------------------------------------
-        # GRASP COMPLETE
-        # --------------------------------------------------
-        elif self.state == "GRASP":
+        self.busy = True
 
-            self.state = "CLOSE_GRIPPER"
+        x = msg.point.x
+        y = msg.point.y
+        z = msg.point.z
 
-            self.get_logger().info("Closing gripper (simulation placeholder)")
+        frame = msg.header.frame_id
 
-            # --------------------------------------------------
-            # In real robot:
-            # send gripper command here
-            # --------------------------------------------------
+        # -------------------------------------------------
+        # 1. OPEN GRIPPER
+        # -------------------------------------------------
 
-            self.state = "LIFT"
+        self.open_gripper()
 
-            self.get_logger().info("Lifting cube")
+        # 2. MOVE ABOVE CUBE
 
-            self.send_goal(self.target_pose, z_offset=0.10)
+        hover_z = z + 0.03
 
-            return
+        success = self.move_to(x, y, hover_z, frame)
 
-        # --------------------------------------------------
-        # LIFT COMPLETE
-        # --------------------------------------------------
-        elif self.state == "LIFT":
-
-            self.get_logger().info("Pick sequence complete ✅")
-
-            self.state = "IDLE"
-
+        if not success:
             self.busy = False
+            return
+        
+        # 3. MOVE DOWN 1 CM
 
-            self.pose_buffer.clear()
+        grasp_z = hover_z - 0.01
 
-    # ==================================================
-    # Cube Detection Callback
-    # ==================================================
+        success = self.move_to(x, y, grasp_z, frame)
+
+        if not success:
+            self.busy = False
+            return
+
+        # 4. CLOSE GRIPPER
+
+        self.close_gripper()
+
+        # 5. LIFT CUBE
+
+
+        lift_z = hover_z + 0.05
+        self.move_to(x, y, lift_z, frame)
+        self.get_logger().info("Cube lifted!")
+        self.busy = False
+        self.pose_buffer.clear()
+        
+    # CALLBACK
+    # =========================================================
+
     def cube_callback(self, msg):
 
         if self.busy:
             return
 
-        # Store detections
         self.pose_buffer.append(msg)
 
-        # Wait for stable detections
         stable_pose = self.get_stable_pose()
 
         if stable_pose is None:
-
-            self.get_logger().info("Collecting stable detections...")
-
+            self.get_logger().info("Getting stable detections...")
             return
 
-        # --------------------------------------------------
-        # Freeze stable target
-        # --------------------------------------------------
-        self.target_pose = stable_pose
+        self.get_logger().info("Stable cube pose acquired")
 
-        self.busy = True
-
-        # --------------------------------------------------
-        # Start pick sequence
-        # --------------------------------------------------
-        self.state = "PRE_GRASP"
-
-        self.get_logger().info("Stable cube detected ...")
-
-        self.get_logger().info("Moving to pre-grasp pose")
-
-        # 3.5 cm above cube
-        self.send_goal(self.target_pose, z_offset=0.035)
+        self.grasp_cube(stable_pose)
 
 
-# ==========================================================
+# =============================================================
+# MAIN
+# =============================================================
+
 def main():
 
     rclpy.init()
 
-    node = PickCube()
+    node = GraspCube()
 
     rclpy.spin(node)
 

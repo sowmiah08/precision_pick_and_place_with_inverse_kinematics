@@ -42,13 +42,13 @@ class RightArmHardware(Node):
         ]
 
         self.joint_offsets = {
-            1: 0.0514,   # right_shoulder_pan
-            2: 0.0437,   # right_shoulder_lift
-            3: 0.1931,   # right_elbow_flex
-            4: 0.0905,   # right_wrist_flex
-            5: -0.0054,   # right_wrist_roll
-            6: -0.2587,     # gripper
-            }
+            1: 0.0650,
+            2: 0.0437,
+            3: 0.1931,
+            4: 0.0905,
+            5: -0.0054,
+            6: -0.2587,
+        }
 
         self.portHandler = PortHandler(DEVICENAME)
         self.packetHandler = sms_sts(self.portHandler)
