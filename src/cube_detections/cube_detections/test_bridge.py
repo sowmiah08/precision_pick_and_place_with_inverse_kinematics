@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 
-import sys
 import math
 import time
-
-sys.path.append('/home/zozo/Downloads/FTServo_Python')
 
 from scservo_sdk import *
 
@@ -21,10 +18,10 @@ from control_msgs.action import FollowJointTrajectory
 
 DEVICENAME = '/dev/ttyACM2'
 BAUDRATE = 1000000
-MOTOR_IDS = [1, 2, 3, 4, 5, 6]
-
-ACTION_NAME = '/so101_right_arm_controller/follow_joint_trajectory'
-
+MOTOR_IDS_ARM = [1, 2, 3, 4, 5]
+MOTOR_ID_GRIPPER = 6
+ACTION_NAME_ARM = '/so101_right_arm_controller/follow_joint_trajectory'
+ACTION_NAME_GRIPPER = '/so101_right_gripper_controller/follow_joint_trajectory'
 
 class RightArmHardware(Node):
 
@@ -32,14 +29,17 @@ class RightArmHardware(Node):
 
         super().__init__('right_arm_hardware')
 
-        self.joint_names = [
+        self.arm_joint_names = [
             'right_shoulder_pan',
             'right_shoulder_lift',
             'right_elbow_flex',
             'right_wrist_flex',
-            'right_wrist_roll',
-            'right_gripper'
+            'right_wrist_roll'
         ]
+
+        self.gripper_joint_names = ['right_gripper']
+
+        self.joint_names = self.arm_joint_names + self.gripper_joint_names
 
         self.joint_offsets = {
             1: 0.0650,
@@ -76,15 +76,26 @@ class RightArmHardware(Node):
         self._action_server = ActionServer(
             self,
             FollowJointTrajectory,
-            ACTION_NAME,
+            ACTION_NAME_ARM,
             execute_callback=self.execute_trajectory,
             goal_callback=self.goal_callback,
             cancel_callback=self.cancel_callback,
             callback_group=cb_group
         )
 
+        self._gripper_action_server = ActionServer(
+            self,
+            FollowJointTrajectory,
+            ACTION_NAME_GRIPPER,
+            execute_callback=self.execute_gripper_trajectory,
+            goal_callback=self.goal_callback,
+            cancel_callback=self.cancel_callback,
+            callback_group=cb_group,
+        )
+
+
         self.get_logger().info(
-            f"Action server ready at {ACTION_NAME}"
+            f"Action servers ready at {ACTION_NAME_ARM} and {ACTION_NAME_GRIPPER}"
         )
 
     def read_servo_position(self, motor_id):
@@ -109,7 +120,7 @@ class RightArmHardware(Node):
 
         positions = []
 
-        for motor_id in MOTOR_IDS:
+        for motor_id in MOTOR_IDS_ARM + [MOTOR_ID_GRIPPER]:
             raw = self.read_servo_position(motor_id)
             rad = self.servo_to_radians(raw)
             corrected_rad = rad + self.joint_offsets[motor_id]
@@ -132,7 +143,7 @@ class RightArmHardware(Node):
 
         try:
             idx_map = [
-                traj.joint_names.index(n) for n in self.joint_names
+                traj.joint_names.index(n) for n in self.arm_joint_names
             ]
         except ValueError as e:
             self.get_logger().error(
@@ -166,7 +177,7 @@ class RightArmHardware(Node):
 
                 time.sleep(0.005)
 
-            for arm_idx, motor_id in enumerate(MOTOR_IDS):
+            for arm_idx, motor_id in enumerate(MOTOR_IDS_ARM):
                 rad = point.positions[idx_map[arm_idx]]
                 corrected_rad = rad - self.joint_offsets[motor_id]
                 servo_value = self.radians_to_servo(corrected_rad)
@@ -183,6 +194,57 @@ class RightArmHardware(Node):
         result = FollowJointTrajectory.Result()
         result.error_code = FollowJointTrajectory.Result.SUCCESSFUL
         return result
+    
+    def execute_gripper_trajectory(self, goal_handle):
+
+        traj = goal_handle.request.trajectory
+
+        try:
+            gripper_idx = traj.joint_names.index('right_gripper')
+        except ValueError as e:
+            self.get_logger().error(f"Gripper joint missing: {e}")
+            goal_handle.abort()
+            result = FollowJointTrajectory.Result()
+            result.error_code = FollowJointTrajectory.Result.INVALID_JOINTS
+            return result
+
+        speed = 300
+        acceleration = 100
+
+        start = time.monotonic()
+
+        for point in traj.points:
+
+            target_t = (
+                Duration.from_msg(point.time_from_start).nanoseconds
+                / 1e9
+            )
+
+            while time.monotonic() - start < target_t:
+
+                if goal_handle.is_cancel_requested:
+                    goal_handle.canceled()
+                    return FollowJointTrajectory.Result()
+
+                time.sleep(0.005)
+
+            rad = point.positions[gripper_idx]
+            corrected_rad = rad - self.joint_offsets[MOTOR_ID_GRIPPER]
+            servo_value = self.radians_to_servo(corrected_rad)
+            self.packetHandler.WritePosEx(
+                MOTOR_ID_GRIPPER,
+                servo_value,
+                speed,
+                acceleration
+            )
+
+        goal_handle.succeed()
+        self.get_logger().info("Gripper trajectory complete")
+
+        result = FollowJointTrajectory.Result()
+        result.error_code = FollowJointTrajectory.Result.SUCCESSFUL
+        return result
+
 
 
 def main(args=None):

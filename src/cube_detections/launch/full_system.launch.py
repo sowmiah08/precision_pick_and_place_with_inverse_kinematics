@@ -60,6 +60,28 @@ def generate_launch_description():
         }.items()
     )
 
+    cube_detector = Node(
+                package='cube_detections',
+                executable='cube_detector',
+                name='cube_detector',
+                output='screen'
+            )
+    
+    tf_node = Node(
+                package='cube_detections',
+                executable='tf_node',
+                name='tf_node',
+                output='screen'
+    )
+
+    move_to_cube = Node(
+                package='cube_detections',
+                executable='move_to_cube',
+                name='move_to_cube',
+                output='screen'
+    )
+
+
     bridge_node = Node(
         package='cube_detections',
         executable='test_bridge',
@@ -75,6 +97,9 @@ def generate_launch_description():
         static_tfs_launch,
         move_group_launch,
         rviz_launch,
-        bridge_node
-        
+        bridge_node,
+        cube_detector,
+        tf_node,
+        move_to_cube
+
     ])
