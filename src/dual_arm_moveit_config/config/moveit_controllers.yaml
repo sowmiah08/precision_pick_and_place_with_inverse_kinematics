@@ -19,3 +19,12 @@ moveit_simple_controller_manager:
       - right_wrist_flex
       - right_wrist_roll
       - right_gripper
+
+  so101_right_gripper_controller:
+    type: FollowJointTrajectory
+    action_ns: follow_joint_trajectory
+    default: true
+    joints:
+      - right_gripper
+
+  
