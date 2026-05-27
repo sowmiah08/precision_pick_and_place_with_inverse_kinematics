@@ -1,4 +1,4 @@
-# Autonomous Pick & Place — SO-101 Dual-Arm Workcell
+# Autonomous Pick & Place — SO-101 Dual-Arm (using Controls)
 
 A fully autonomous pick-and-place system built on a real **SO-101 robot arm**, driven by **MoveIt 2** motion planning and **RealSense** point-cloud perception. The robot detects coloured cubes in 3D, plans a collision-free grasp trajectory, closes the gripper, lifts the cube, and returns to home — repeating continuously without human intervention.
 
