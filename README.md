@@ -61,7 +61,13 @@ SO-101 right arm (real hardware)
 ---
 
 ## download Servo SDK
+The project uses the official **Feetech FTServo Python SDK** to communicate with the SO-101 servo motors over serial USB.
 
+Clone the SDK from the official GitHub repository:
+
+```bash
+git clone https://github.com/ftservo/FTServo_Python.git
+```
 The SDK is installed locally at:
 
 ```bash
