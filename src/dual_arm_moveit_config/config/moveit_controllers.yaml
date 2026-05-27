@@ -2,6 +2,9 @@
 
 moveit_controller_manager: moveit_simple_controller_manager/MoveItSimpleControllerManager
 
+trajectory_execution:
+  allowed_start_tolerance: 0.0
+
 moveit_simple_controller_manager:
   controller_names:
     - so101_right_arm_controller

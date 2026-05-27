@@ -7,7 +7,8 @@ from moveit_msgs.msg import (
     Constraints,
     PositionConstraint,
     OrientationConstraint,
-    BoundingVolume
+    BoundingVolume,
+    RobotState
 )
 
 from control_msgs.action import FollowJointTrajectory
@@ -47,42 +48,13 @@ class MoveToCube(Node):
         )
 
         self.gripper_client.wait_for_server()
-        #self.go_home()
+        self.arm_client = ActionClient(self, FollowJointTrajectory, '/so101_right_arm_controller/follow_joint_trajectory')
+        self.arm_client.wait_for_server()
 
         self.get_logger().info("Waiting for MoveGroup action server...")
         self.action_client.wait_for_server()
         self.get_logger().info("Moveit connected.")
-
-    '''def go_home(self):
-
-        goal = FollowJointTrajectory.Goal()
-
-        goal.trajectory.joint_names = [
-            "right_shoulder_pan",
-            "right_shoulder_lift",
-            "right_elbow_flex",
-            "right_wrist_flex",
-            "right_wrist_roll",
-            "right_gripper"
-        ]
-
-        point = JointTrajectoryPoint()
-
-        point.positions = [
-        0.16089721164803988,
-        -0.8853521864462123,
-        -0.6577000617414115,
-        1.1990717666513437,
-        -1.6632709949713171,
-        0.485   # OPEN gripper
-        ]
-
-        point.time_from_start.sec = 3
-
-        goal.trajectory.points.append(point)
-
-        self.gripper_client.send_goal_async(goal)'''
-
+        self.go_home()
 
     def get_stable_pose(self):
 
@@ -103,17 +75,20 @@ class MoveToCube(Node):
 
         return stable_msg
 
-    def create_goal(self, msg):
+    def create_goal(self, msg, is_lift=False):
 
         pose = PoseStamped()
-
         pose.header.frame_id = msg.header.frame_id
         pose.header.stamp = self.get_clock().now().to_msg()
 
-
-        pose.pose.position.x = msg.point.x + 0.042
-        pose.pose.position.y = msg.point.y + 0.01
-        pose.pose.position.z = msg.point.z + 0.1
+        if is_lift:
+            pose.pose.position.x = msg.point.x
+            pose.pose.position.y = msg.point.y
+            pose.pose.position.z = msg.point.z + 0.1
+        else:
+            pose.pose.position.x = msg.point.x + 0.042
+            pose.pose.position.y = msg.point.y + 0.01
+            pose.pose.position.z = msg.point.z + 0.1
 
         pose.pose.orientation.x = 0.0
         pose.pose.orientation.y = -0.707
@@ -139,15 +114,12 @@ class MoveToCube(Node):
         constraints.position_constraints.append(pos_constraint)
         ori_constraint = OrientationConstraint()
         ori_constraint.header.frame_id = msg.header.frame_id
-
         ori_constraint.link_name = "right_moving_jaw_so101_v1_link"
-
         ori_constraint.orientation = pose.pose.orientation
 
-        ori_constraint.absolute_x_axis_tolerance = 0.3
-        ori_constraint.absolute_y_axis_tolerance = 0.3
-        ori_constraint.absolute_z_axis_tolerance = 0.3
-
+        ori_constraint.absolute_x_axis_tolerance = 0.5 if is_lift else 0.3
+        ori_constraint.absolute_y_axis_tolerance = 0.5 if is_lift else 0.3
+        ori_constraint.absolute_z_axis_tolerance = 0.5 if is_lift else 0.3
         ori_constraint.weight = 0.9
 
         constraints.orientation_constraints.append(ori_constraint)
@@ -155,15 +127,20 @@ class MoveToCube(Node):
         goal = MoveGroup.Goal()
         goal.request.group_name = "so101_right_arm"
         goal.request.goal_constraints.append(constraints)
-        goal.request.num_planning_attempts = 5
-        goal.request.allowed_planning_time = 5.0
         goal.request.max_velocity_scaling_factor = 0.3
         goal.request.max_acceleration_scaling_factor = 0.3
+        goal.request.num_planning_attempts = 10 if is_lift else 5   
+        goal.request.allowed_planning_time = 10.0 if is_lift else 5.0
 
+        goal.request.start_state = RobotState()  
+        goal.request.start_state.is_diff = True 
+        goal.planning_options.replan = False
+        goal.planning_options.plan_only = False
         return goal
 
-    def send_goal(self, msg):
-        goal = self.create_goal(msg)
+    def send_goal(self, msg, is_lift=False):
+        goal = self.create_goal(msg, is_lift=is_lift)
+
         cube_dist = float(np.sqrt(
             msg.point.x ** 2 + msg.point.y ** 2 + msg.point.z ** 2
         ))
@@ -189,17 +166,17 @@ class MoveToCube(Node):
         lift_pose = PointStamped()
         lift_pose.header.frame_id = self.last_cube_pose.header.frame_id
         lift_pose.point.x = self.last_cube_pose.point.x 
-        lift_pose.point.y = self.last_cube_pose.point.y
+        lift_pose.point.y = self.last_cube_pose.point.y 
         lift_pose.point.z = self.last_cube_pose.point.z + 0.20
 
-        self.send_goal(lift_pose)
+        self.send_goal(lift_pose, is_lift=True)
 
     def close_gripper(self):
         goal = FollowJointTrajectory.Goal()
         goal.trajectory.joint_names = ["right_gripper"]
         point = JointTrajectoryPoint()
         point.positions = [-0.018251147239539633]
-        point.time_from_start.sec = 1
+        point.time_from_start.sec = 3
         goal.trajectory.points.append(point)
 
         self.get_logger().info("Closing gripper...")
@@ -216,16 +193,13 @@ class MoveToCube(Node):
         result_future.add_done_callback(self._gripper_close_done)
 
     def _gripper_close_done(self, future):
-        self.get_logger().info("Gripper closed — lifting in 0.5s")
-        self._lift_timer = self.create_timer(0.5, self._do_lift_once)
+        self.get_logger().info("Gripper closed — lifting in 0.2s")
+        self._lift_timer = self.create_timer(0.2, self._do_lift_once)
 
-    def _do_lift_once(self, timer=None):
+    def _do_lift_once(self):
         self._lift_timer.cancel()
         self.get_logger().info("Timer fired — starting lift")
         self.lift_arm()
-        #if self.is_lifting:
-        #    return
-        #self.lift_arm()
 
   
     def goal_response_callback(self, future):
@@ -272,42 +246,89 @@ class MoveToCube(Node):
 
     def _gripper_open_done(self, future):
         self.get_logger().info("Gripper open — now moving to cube")
-        self.send_goal(self.last_cube_pose)    # move AFTER gripper is open
+        self.send_goal(self.last_cube_pose)  
 
     def result_callback(self, future):
-        future.result()
-        self.get_logger().info(
-            f"MoveGroup result — is_lifting={self.is_lifting}"
-        )
-
+        result = future.result()
+        error_code = result.result.error_code.val  
         if self.is_lifting:
-            self.get_logger().info("Lift complete — opening gripper")
-            self._send_gripper(0.6)
+            if error_code != 1:
+                self.get_logger().error(f"LIFT FAILED with error code {error_code} — holding position")
+                self.is_lifting = False
+                self.busy = False
+                return
+            self.get_logger().info("Lift complete — holding 3s before opening gripper")
             self.is_lifting = False
             self.busy = False
             self.locked = False
             self.pose_buffer.clear()
+            self._open_timer = self.create_timer(3.0, self._do_open_once)
             return
-        
-        # Reached grasp pose — close gripper, lift triggered from _gripper_close_done
+
+        if error_code != 1:
+            self.get_logger().error(f"Grasp move FAILED with error code {error_code}")
+            self.busy = False
+            self.locked = False
+            self.pose_buffer.clear()
+            return
+
         self.get_logger().info("Reached grasp pose — closing gripper")
         self.busy = False
         self.close_gripper()
 
-    # def result_callback(self, future):
+    def _do_open_once(self):
+        self._open_timer.cancel()
+        self.get_logger().info("Opening gripper after 3s hold")
+        self._send_gripper(0.6)
+        self._home_timer = self.create_timer(1.5, self._do_home_once)
 
-    #     future.result()
-    #     self.get_logger().info("Motion complete")
-    #     self.get_logger().info("Robot reached grasp pose")
+    def _do_home_once(self):
+        self._home_timer.cancel()
+        self.get_logger().info("Returning to home position")
+        self.go_home()
 
-    #     # wait for robot to settle
-       
-    #     time.sleep(2.0)
+    def go_home(self):
+        goal = FollowJointTrajectory.Goal()
+        goal.trajectory.joint_names = [
+            "right_shoulder_pan",
+            "right_shoulder_lift",
+            "right_elbow_flex",
+            "right_wrist_flex",
+            "right_wrist_roll",
+            "right_gripper"
+        ]
+        point = JointTrajectoryPoint()
+        point.positions = [
+            0.03814878073854905,
+            -1.356399290061385,
+            1.1252208972189501,
+            1.219018386674136,
+            0.003038954625027417,
+            0.20083943821740807
+        ]
+        point.time_from_start.sec = 3
+        goal.trajectory.points.append(point)
 
-    #     self.close_gripper()
-    #     self.busy=False
-    #     self.pose_buffer.clear()
-    #     return
+        self.get_logger().info("Going home...")
+        self.busy = True
+        future = self.arm_client.send_goal_async(goal)
+        future.add_done_callback(self._home_response)
+
+    def _home_response(self, future):
+        goal_handle = future.result()
+        if not goal_handle.accepted:
+            self.get_logger().error("Home goal rejected")
+            self.busy = False
+            return
+        self.get_logger().info("Home goal accepted")
+        result_future = goal_handle.get_result_async()
+        result_future.add_done_callback(self._home_done)
+
+    def _home_done(self, future):
+        self.get_logger().info("Home reached — ready for next cube")
+        self.busy = False
+        self.locked = False
+        self.pose_buffer.clear()
 
     def cube_callback(self, msg):
 
