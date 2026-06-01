@@ -81,6 +81,13 @@ def generate_launch_description():
                 output='screen'
     )
 
+    pick_nd_place = Node(
+                package='cube_detections',
+                executable='pick_nd_place',
+                name='pick_nd_place',
+                output='screen'
+    )
+
 
     bridge_node = Node(
         package='cube_detections',
@@ -100,6 +107,6 @@ def generate_launch_description():
         bridge_node,
         cube_detector,
         tf_node,
-        move_to_cube
+        pick_nd_place
 
     ])

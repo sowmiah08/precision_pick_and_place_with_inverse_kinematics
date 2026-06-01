@@ -37,6 +37,7 @@ setup(
             'grasp = cube_detections.grasp:main',
             'right_arm_bridge = cube_detections.right_arm_bridge:main',
             'test_bridge = cube_detections.test_bridge:main',
+            'pick_nd_place = cube_detections.pick_nd_place:main',
         ],
     },
 )

@@ -46,6 +46,14 @@
   <!-- opposite side of robots -->
   <xacro:property name="shelf_y_pos" value="${-table_y/2 + shelf_y/2}"/>
 
+  <!-- ================= BIN ================= -->
+  <xacro:property name="bin_size" value="0.127"/>
+  <xacro:property name="bin_height" value="0.06"/>
+
+  <!-- centered between robots, slightly in front of camera pole -->
+  <xacro:property name="bin_x" value="0.0"/>
+  <xacro:property name="bin_y" value="0.15"/>
+
   <!-- ================= MATERIALS ================= -->
   <material name="wood">
     <color rgba="0.72 0.52 0.30 1.0"/>
@@ -65,6 +73,10 @@
 
   <material name="sts3215">
     <color rgba="0.1 0.1 0.1 1.0"/>
+  </material>
+
+  <material name="bin_orange">
+    <color rgba="1.0 0.5 0.0 1.0"/>
   </material>
 
   <!-- ================= WORLD ================= -->
@@ -274,6 +286,61 @@
     <parent link="camera_link"/>    
     <child link="camera_depth_optical_frame"/>
     <origin xyz="0 0 0" rpy="${-pi/2} 0 ${-pi/2}"/>  
+  </joint>
+
+  <!-- ================= BIN ================= -->
+  <link name="bin_link">
+
+    <!-- Bottom -->
+    <visual>
+    <origin xyz="0 0 0.0025"/>
+    <geometry>
+      <box size="0.1 0.1 0.005"/>
+    </geometry>
+    <material name="bin_orange"/>
+    </visual>
+
+    <!-- Front wall -->
+    <visual>
+      <origin xyz="0 0.0525 0.03"/>
+      <geometry>
+        <box size="0.110 0.005 0.06"/>
+      </geometry>
+      <material name="bin_orange"/>
+    </visual>
+
+    <!-- Back wall -->
+    <visual>
+      <origin xyz="0 -0.0525 0.03"/>
+      <geometry>
+        <box size="0.110 0.005 0.06"/>
+      </geometry>
+      <material name="bin_orange"/>
+    </visual>
+
+    <!-- Left wall -->
+    <visual>
+      <origin xyz="-0.0525 0 0.03"/>
+      <geometry>
+        <box size="0.005 0.1 0.06"/>
+      </geometry>
+      <material name="bin_orange"/>
+    </visual>
+
+    <!-- Right wall -->
+    <visual>
+      <origin xyz="0.0525 0 0.03"/>
+      <geometry>
+        <box size="0.005 0.1 0.06"/>
+      </geometry>
+      <material name="bin_orange"/>
+    </visual>
+  </link>
+
+  <joint name="shelf_to_bin" type="fixed">
+    <parent link="upper_shelf_link"/>
+    <child link="bin_link"/>
+    <origin xyz="0 0 0.13" rpy="0 0 0"/>
   </joint>
 
 </robot>
