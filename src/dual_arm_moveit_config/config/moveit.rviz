@@ -67,6 +67,11 @@ Visualization Manager:
           Expand Link Details: false
           Expand Tree: false
           Link Tree Style: Links in Alphabetic Order
+          bin_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
           camera_depth_optical_frame:
             Alpha: 1
             Show Axes: false
@@ -254,6 +259,11 @@ Visualization Manager:
           Expand Link Details: false
           Expand Tree: false
           Link Tree Style: Links in Alphabetic Order
+          bin_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
           camera_depth_optical_frame:
             Alpha: 1
             Show Axes: false
@@ -469,7 +479,7 @@ Visualization Manager:
       Pitch: 1.5697963237762451
       Target Frame: world
       Value: Orbit (rviz_default_plugins)
-      Yaw: 1.4169951677322388
+      Yaw: 1.5819950103759766
     Saved: ~
 Window Geometry:
   Displays:
