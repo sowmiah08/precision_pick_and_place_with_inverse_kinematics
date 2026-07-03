@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import math
 import time
 
@@ -244,8 +242,6 @@ class RightArmHardware(Node):
         result = FollowJointTrajectory.Result()
         result.error_code = FollowJointTrajectory.Result.SUCCESSFUL
         return result
-
-
 
 def main(args=None):
 
