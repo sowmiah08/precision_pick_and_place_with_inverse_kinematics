@@ -47,14 +47,18 @@ class MoveToCube(Node):
             '/so101_right_gripper_controller/follow_joint_trajectory'
         )
 
-        self.gripper_client.wait_for_server()
         self.arm_client = ActionClient(self, FollowJointTrajectory, '/so101_right_arm_controller/follow_joint_trajectory')
-        self.arm_client.wait_for_server()
 
-        self.get_logger().info("Waiting for MoveGroup action server...")
-        self.action_client.wait_for_server()
-        self.get_logger().info("Moveit connected.")
+        self._wait_for_server(self.gripper_client, 'gripper controller')
+        self._wait_for_server(self.arm_client, 'arm controller')
+        self._wait_for_server(self.action_client, 'MoveGroup')
         self.go_home()
+
+    def _wait_for_server(self, client, name, timeout_sec=5.0):
+        self.get_logger().info(f"Waiting for {name} action server...")
+        while not client.wait_for_server(timeout_sec=timeout_sec):
+            self.get_logger().warn(f"{name} not available, retrying...")
+        self.get_logger().info(f"{name} connected.")
 
     def get_stable_pose(self):
 

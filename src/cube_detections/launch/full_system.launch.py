@@ -107,6 +107,7 @@ def generate_launch_description():
         bridge_node,
         cube_detector,
         tf_node,
-        pick_nd_place
+        pick_nd_place,
+        move_to_cube
 
     ])
