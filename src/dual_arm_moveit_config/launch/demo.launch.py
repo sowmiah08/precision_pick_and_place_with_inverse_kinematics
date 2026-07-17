@@ -1,7 +1,39 @@
-from moveit_configs_utils import MoveItConfigsBuilder
-from moveit_configs_utils.launches import generate_demo_launch
+from launch import LaunchDescription
+from launch.actions import IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
-    moveit_config = MoveItConfigsBuilder("so101_dual_arm", package_name="dual_arm_moveit_config").to_moveit_configs()
-    return generate_demo_launch(moveit_config)
+    moveit_share = FindPackageShare('dual_arm_moveit_config')
+
+    rsp_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            moveit_share, '/launch/rsp.launch.py'
+        ])
+    )
+
+    static_tfs_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            moveit_share, '/launch/static_virtual_joint_tfs.launch.py'
+        ])
+    )
+
+    move_group_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            moveit_share, '/launch/move_group.launch.py'
+        ])
+    )
+
+    rviz_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            moveit_share, '/launch/moveit_rviz.launch.py'
+        ])
+    )
+
+    return LaunchDescription([
+        rsp_launch,
+        static_tfs_launch,
+        move_group_launch,
+        rviz_launch,
+    ])

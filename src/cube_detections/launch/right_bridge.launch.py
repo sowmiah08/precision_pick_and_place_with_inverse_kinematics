@@ -62,7 +62,7 @@ def generate_launch_description():
 
     bridge_node = Node(
         package='cube_detections',
-        executable='test_bridge',
+        executable='right_bridge',
         name='right_arm_hardware',
         output='screen'
     )

@@ -6,6 +6,9 @@ controller_manager:
     so101_right_arm_controller:
       type: joint_trajectory_controller/JointTrajectoryController
 
+    so101_left_arm_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
 
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
@@ -19,6 +22,21 @@ so101_right_arm_controller:
       - right_wrist_flex
       - right_wrist_roll
       - right_gripper
+    command_interfaces:
+      []
+    state_interfaces:
+      []
+    allow_nonzero_velocity_at_trajectory_end: true
+
+so101_left_arm_controller:
+  ros__parameters:
+    joints:
+      - left_shoulder_pan
+      - left_shoulder_lift
+      - left_elbow_flex
+      - left_wrist_flex
+      - left_wrist_roll
+      - left_gripper
     command_interfaces:
       []
     state_interfaces:

@@ -38,3 +38,33 @@ joint_limits:
     max_velocity: 5.0
     has_acceleration_limits: true
     max_acceleration: 5.0
+  left_elbow_flex:
+    has_velocity_limits: true
+    max_velocity: 5.0
+    has_acceleration_limits: true
+    max_acceleration: 5.0
+  left_gripper:
+    has_velocity_limits: true
+    max_velocity: 5.0
+    has_acceleration_limits: true
+    max_acceleration: 5.0
+  left_shoulder_lift:
+    has_velocity_limits: true
+    max_velocity: 5.0
+    has_acceleration_limits: true
+    max_acceleration: 5.0
+  left_shoulder_pan:
+    has_velocity_limits: true
+    max_velocity: 5.0
+    has_acceleration_limits: true
+    max_acceleration: 5.0
+  left_wrist_flex:
+    has_velocity_limits: true
+    max_velocity: 5.0
+    has_acceleration_limits: true
+    max_acceleration: 5.0
+  left_wrist_roll:
+    has_velocity_limits: true
+    max_velocity: 5.0
+    has_acceleration_limits: true
+    max_acceleration: 5.0

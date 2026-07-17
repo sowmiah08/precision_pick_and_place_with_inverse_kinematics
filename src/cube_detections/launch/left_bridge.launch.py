@@ -46,7 +46,7 @@ def generate_launch_description():
         ])
     )
 
-    # RealSense Camera 
+    # RealSense Camera
     realsense_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             PathJoinSubstitution([
@@ -60,43 +60,14 @@ def generate_launch_description():
         }.items()
     )
 
-    cube_detector = Node(
-                package='cube_detections',
-                executable='cube_detector',
-                name='cube_detector',
-                output='screen'
-            )
-    
-    tf_node = Node(
-                package='cube_detections',
-                executable='tf_node',
-                name='tf_node',
-                output='screen'
-    )
-
-    move_to_cube = Node(
-                package='cube_detections',
-                executable='move_to_cube',
-                name='move_to_cube',
-                output='screen'
-    )
-
-    pick_nd_place = Node(
-                package='cube_detections',
-                executable='pick_nd_place',
-                name='pick_nd_place',
-                output='screen'
-    )
-
-
-    right_bridge = Node(
+    bridge_node = Node(
         package='cube_detections',
-        executable='right_bridge',
-        name='right_arm_hardware',
+        executable='left_bridge',
+        name='left_arm_hardware',
         output='screen'
     )
 
-    
+
 
     return LaunchDescription([
         realsense_launch,
@@ -104,10 +75,6 @@ def generate_launch_description():
         static_tfs_launch,
         move_group_launch,
         rviz_launch,
-        right_bridge,
-        cube_detector,
-        tf_node,
-        pick_nd_place,
-        move_to_cube
+        bridge_node
 
     ])
