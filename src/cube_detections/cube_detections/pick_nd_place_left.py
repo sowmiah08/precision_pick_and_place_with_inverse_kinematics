@@ -16,10 +16,10 @@ from shape_msgs.msg import SolidPrimitive
 from collections import deque
 import numpy as np
 
-class MoveToCube(Node):
+class MoveToCubeLeft(Node):
 
     def __init__(self):
-        super().__init__('move_to_cube')
+        super().__init__('pick_nd_place_left')
 
         self.action_client = ActionClient(self, MoveGroup, '/move_action')
 
@@ -28,11 +28,13 @@ class MoveToCube(Node):
         self.locked = False
         self.pose_buffer = deque(maxlen=10)
 
+        # TODO: calibrate — bin drop pose for the LEFT arm in left_base_link frame.
+        # Placeholder mirrors the right arm's bin y-sign.
         self.last_bin_pose = PointStamped()
-        self.last_bin_pose.header.frame_id = "right_base_link"
+        self.last_bin_pose.header.frame_id = "left_base_link"
 
         self.last_bin_pose.point.x = 0.430
-        self.last_bin_pose.point.y = -0.250
+        self.last_bin_pose.point.y = 0.250
         self.last_bin_pose.point.z = 0.210
 
         self.get_logger().info(
@@ -42,21 +44,19 @@ class MoveToCube(Node):
             f"{self.last_bin_pose.point.z:.3f})"
         )
 
-        # ── Cube subscriber ──────────────────────────────────────────────
         self.sub_cube = self.create_subscription(
-            PointStamped, '/cube_right_base', self.cube_callback, 10
+            PointStamped, '/cube_left_base', self.cube_callback, 10
         )
 
-        # ── Action clients ───────────────────────────────────────────────
         self.gripper_client = ActionClient(
             self, FollowJointTrajectory,
-            '/so101_right_gripper_controller/follow_joint_trajectory'
+            '/so101_left_gripper_controller/follow_joint_trajectory'
         )
         self.gripper_client.wait_for_server()
 
         self.arm_client = ActionClient(
             self, FollowJointTrajectory,
-            '/so101_right_arm_controller/follow_joint_trajectory'
+            '/so101_left_arm_controller/follow_joint_trajectory'
         )
         self.arm_client.wait_for_server()
 
@@ -65,10 +65,6 @@ class MoveToCube(Node):
         self.get_logger().info("MoveIt connected.")
         self.go_home()
 
-    # ------------------------------------------------------------------ #
-    #  CUBE POSE — average 10 noisy detections                            #
-    # ------------------------------------------------------------------ #
-
     def get_stable_pose(self):
         if len(self.pose_buffer) < 10:
             return None
@@ -76,15 +72,11 @@ class MoveToCube(Node):
         y = np.mean([p.point.y for p in self.pose_buffer])
         z = np.mean([p.point.z for p in self.pose_buffer])
         stable = PointStamped()
-        stable.header.frame_id = 'right_base_link'
+        stable.header.frame_id = 'left_base_link'
         stable.point.x = float(x)
         stable.point.y = float(y)
         stable.point.z = float(z)
         return stable
-
-    # ------------------------------------------------------------------ #
-    #  GOAL CREATION                                                       #
-    # ------------------------------------------------------------------ #
 
     def create_goal(self, msg, is_lift=False, is_bin=False):
         pose = PoseStamped()
@@ -92,19 +84,17 @@ class MoveToCube(Node):
         pose.header.stamp = self.get_clock().now().to_msg()
 
         if is_bin:
-            # Hover directly above the bin centre; z already includes BIN_Z_OFFSET
-            # from _resolve_bin_pose, plus the extra 0.15 m approach clearance
             pose.pose.position.x = msg.point.x
             pose.pose.position.y = msg.point.y
-            pose.pose.position.z = msg.point.z 
+            pose.pose.position.z = msg.point.z
         elif is_lift:
             pose.pose.position.x = msg.point.x
             pose.pose.position.y = msg.point.y
             pose.pose.position.z = msg.point.z + 0.1
         else:
-            pose.pose.position.x = msg.point.x + 0.04
+            pose.pose.position.x = msg.point.x + 0.042
             pose.pose.position.y = msg.point.y + 0.01
-            pose.pose.position.z = msg.point.z + 0.02
+            pose.pose.position.z = msg.point.z + 0.1
 
         pose.pose.orientation.x = 0.0
         pose.pose.orientation.y = -0.707
@@ -113,7 +103,7 @@ class MoveToCube(Node):
 
         pos_constraint = PositionConstraint()
         pos_constraint.header.frame_id = pose.header.frame_id
-        pos_constraint.link_name = "right_moving_jaw_so101_v1_link"
+        pos_constraint.link_name = "left_moving_jaw_so101_v1_link"
         box = SolidPrimitive()
         box.type = SolidPrimitive.BOX
         box.dimensions = [0.05, 0.05, 0.05]
@@ -125,7 +115,7 @@ class MoveToCube(Node):
 
         ori_constraint = OrientationConstraint()
         ori_constraint.header.frame_id = msg.header.frame_id
-        ori_constraint.link_name = "right_moving_jaw_so101_v1_link"
+        ori_constraint.link_name = "left_moving_jaw_so101_v1_link"
         ori_constraint.orientation = pose.pose.orientation
         tol = 0.5 if (is_lift or is_bin) else 0.3
         ori_constraint.absolute_x_axis_tolerance = tol
@@ -138,7 +128,7 @@ class MoveToCube(Node):
         constraints.orientation_constraints.append(ori_constraint)
 
         goal = MoveGroup.Goal()
-        goal.request.group_name = "so101_right_arm"
+        goal.request.group_name = "so101_left_arm"
         goal.request.goal_constraints.append(constraints)
         goal.request.max_velocity_scaling_factor = 0.3
         goal.request.max_acceleration_scaling_factor = 0.3
@@ -149,10 +139,6 @@ class MoveToCube(Node):
         goal.planning_options.replan = False
         goal.planning_options.plan_only = False
         return goal
-
-    # ------------------------------------------------------------------ #
-    #  SEND GOAL                                                           #
-    # ------------------------------------------------------------------ #
 
     def send_goal(self, msg, is_lift=False, is_bin=False):
         goal = self.create_goal(msg, is_lift=is_lift, is_bin=is_bin)
@@ -166,10 +152,6 @@ class MoveToCube(Node):
         future = self.action_client.send_goal_async(goal)
         future.add_done_callback(self.goal_response_callback)
 
-    # ------------------------------------------------------------------ #
-    #  LIFT                                                                #
-    # ------------------------------------------------------------------ #
-
     def lift_arm(self):
         self.is_lifting = True
         lift_pose = PointStamped()
@@ -179,30 +161,26 @@ class MoveToCube(Node):
         lift_pose.point.z = self.last_cube_pose.point.z + 0.20
         self.send_goal(lift_pose, is_lift=True)
 
-    # ------------------------------------------------------------------ #
-    #  MOVE TO BIN                                                         #
-    # ------------------------------------------------------------------ #
-
     def move_to_bin(self):
         goal = FollowJointTrajectory.Goal()
 
         goal.trajectory.joint_names = [
-            "right_shoulder_pan",
-            "right_shoulder_lift",
-            "right_elbow_flex",
-            "right_wrist_flex",
-            "right_wrist_roll"
+            "left_shoulder_pan",
+            "left_shoulder_lift",
+            "left_elbow_flex",
+            "left_wrist_flex",
+            "left_wrist_roll"
         ]
 
         point = JointTrajectoryPoint()
 
+        # TODO: calibrate — bin joint pose for the LEFT arm.
         point.positions = [
-            0.11026348389787494,
-            0.43419344583081915,
-            -0.9124030558786058,
-            0.7142154645588525,
-            0.05827574853429847,
-
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
         ]
 
         point.time_from_start.sec = 3
@@ -213,7 +191,7 @@ class MoveToCube(Node):
 
         future = self.arm_client.send_goal_async(goal)
         future.add_done_callback(self._bin_pose_response)
-    
+
     def _bin_pose_response(self, future):
         goal_handle = future.result()
 
@@ -223,7 +201,7 @@ class MoveToCube(Node):
 
         result_future = goal_handle.get_result_async()
         result_future.add_done_callback(self._bin_pose_done)
-    
+
     def _bin_pose_done(self, future):
 
         self.get_logger().info("Reached bin pose")
@@ -243,23 +221,19 @@ class MoveToCube(Node):
             self._do_home_once
         )
 
-    # ------------------------------------------------------------------ #
-    #  GRIPPER                                                             #
-    # ------------------------------------------------------------------ #
-
     def _send_gripper(self, position, duration_sec=1):
         goal = FollowJointTrajectory.Goal()
-        goal.trajectory.joint_names = ["right_gripper"]
+        goal.trajectory.joint_names = ["left_gripper"]
         point = JointTrajectoryPoint()
         point.positions = [position]
         point.time_from_start.sec = duration_sec
         goal.trajectory.points.append(point)
-        self.get_logger().info(f"Gripper → {position:.4f}")
+        self.get_logger().info(f"Gripper -> {position:.4f}")
         self.gripper_client.send_goal_async(goal)
 
     def close_gripper(self):
         goal = FollowJointTrajectory.Goal()
-        goal.trajectory.joint_names = ["right_gripper"]
+        goal.trajectory.joint_names = ["left_gripper"]
         point = JointTrajectoryPoint()
         point.positions = [-0.018251147239539633]
         point.time_from_start.sec = 3
@@ -286,7 +260,7 @@ class MoveToCube(Node):
 
     def open_gripper_then_move(self):
         goal = FollowJointTrajectory.Goal()
-        goal.trajectory.joint_names = ["right_gripper"]
+        goal.trajectory.joint_names = ["left_gripper"]
         point = JointTrajectoryPoint()
         point.positions = [0.6]
         point.time_from_start.sec = 1
@@ -307,17 +281,12 @@ class MoveToCube(Node):
         self.get_logger().info("Gripper open — moving to cube")
         self.send_goal(self.last_cube_pose)
 
-    # ------------------------------------------------------------------ #
-    #  ACTION CALLBACKS                                                    #
-    # ------------------------------------------------------------------ #
-
     def goal_response_callback(self, future):
         goal_handle = future.result()
         if not goal_handle.accepted:
             self.get_logger().warn("Goal rejected")
             self.busy = False
             self.is_lifting = False
-            self.is_moving_to_bin = False
             return
         self.get_logger().info("Goal accepted")
         result_future = goal_handle.get_result_async()
@@ -327,8 +296,6 @@ class MoveToCube(Node):
         result = future.result()
         error_code = result.result.error_code.val
 
-
-        # ── LIFT DONE ─────────────────────────────────────────────────
         if self.is_lifting:
             self.is_lifting = False
             self.busy = False
@@ -341,7 +308,6 @@ class MoveToCube(Node):
             self.move_to_bin()
             return
 
-        # ── GRASP MOVE DONE ───────────────────────────────────────────
         if error_code != 1:
             self.get_logger().error(f"Grasp move FAILED (error {error_code})")
             self.busy = False
@@ -352,10 +318,6 @@ class MoveToCube(Node):
         self.busy = False
         self.close_gripper()
 
-    # ------------------------------------------------------------------ #
-    #  HOME                                                                #
-    # ------------------------------------------------------------------ #
-
     def _do_home_once(self):
         self._home_timer.cancel()
         self.get_logger().info("Returning home")
@@ -364,13 +326,17 @@ class MoveToCube(Node):
     def go_home(self):
         goal = FollowJointTrajectory.Goal()
         goal.trajectory.joint_names = [
-            "right_shoulder_pan", "right_shoulder_lift", "right_elbow_flex",
-            "right_wrist_flex", "right_wrist_roll"
+            "left_shoulder_pan", "left_shoulder_lift", "left_elbow_flex",
+            "left_wrist_flex", "left_wrist_roll", "left_gripper"
         ]
         point = JointTrajectoryPoint()
         point.positions = [
-            0.03814878073854905, -1.356399290061385, 1.1252208972189501,
-            1.219018386674136, 0.003038954625027417
+            0.0,
+            -1.500983,
+            0.872665,
+            0.959931,
+            0.0,
+            0.663225,
         ]
         point.time_from_start.sec = 3
         goal.trajectory.points.append(point)
@@ -394,10 +360,6 @@ class MoveToCube(Node):
         self.locked = False
         self.pose_buffer.clear()
 
-    # ------------------------------------------------------------------ #
-    #  CUBE SUBSCRIBER                                                     #
-    # ------------------------------------------------------------------ #
-
     def cube_callback(self, msg):
         if self.busy or self.locked:
             return
@@ -406,7 +368,7 @@ class MoveToCube(Node):
         if stable_pose is None:
             self.get_logger().info("Accumulating cube detections...")
             return
-        
+
         self.get_logger().info("Stable cube pose acquired — starting pick sequence")
         self.locked = True
         self.last_cube_pose = stable_pose
@@ -415,7 +377,7 @@ class MoveToCube(Node):
 
 def main():
     rclpy.init()
-    node = MoveToCube()
+    node = MoveToCubeLeft()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()

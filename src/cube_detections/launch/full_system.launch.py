@@ -74,13 +74,6 @@ def generate_launch_description():
                 output='screen'
     )
 
-    move_to_cube = Node(
-                package='cube_detections',
-                executable='move_to_cube',
-                name='move_to_cube',
-                output='screen'
-    )
-
     pick_nd_place = Node(
                 package='cube_detections',
                 executable='pick_nd_place',
@@ -88,6 +81,12 @@ def generate_launch_description():
                 output='screen'
     )
 
+    pick_nd_place_left = Node(
+                package='cube_detections',
+                executable='pick_nd_place_left',
+                name='pick_nd_place_left',
+                output='screen'
+    )
 
     right_bridge = Node(
         package='cube_detections',
@@ -96,7 +95,14 @@ def generate_launch_description():
         output='screen'
     )
 
-    
+    left_bridge = Node(
+        package='cube_detections',
+        executable='left_bridge',
+        name='left_arm_hardware',
+        output='screen'
+    )
+
+
 
     return LaunchDescription([
         realsense_launch,
@@ -105,9 +111,10 @@ def generate_launch_description():
         move_group_launch,
         rviz_launch,
         right_bridge,
+        left_bridge,
         cube_detector,
         tf_node,
         pick_nd_place,
-        move_to_cube
+        pick_nd_place_left,
 
     ])

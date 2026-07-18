@@ -37,6 +37,7 @@ setup(
             'right_bridge = cube_detections.right_bridge:main',
             'left_bridge = cube_detections.left_bridge:main',
             'pick_nd_place = cube_detections.pick_nd_place:main',
+            'pick_nd_place_left = cube_detections.pick_nd_place_left:main',
         ],
     },
 )
